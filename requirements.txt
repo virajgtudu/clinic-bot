@@ -1,0 +1,7 @@
+flask
+python-dotenv
+requests
+gspread
+oauth2client
+streamlit
+pandas
