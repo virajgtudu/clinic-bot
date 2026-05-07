@@ -11,15 +11,24 @@ STATE_FILE = CONFIG_DIR / "state.json"
 
 # User management functions
 def load_users():
+    # Priority 1: Environment Variable (Cloud)
+    env_data = os.getenv("CLINIC_USERS_DATA")
+    if env_data:
+        try:
+            return json.loads(env_data)
+        except Exception as e:
+            print(f"Failed to parse CLINIC_USERS_DATA env var: {e}")
+
     if not USERS_FILE.exists():
         return {}
     with open(USERS_FILE, "r") as f:
         return json.load(f)
 
 def save_users(users):
-    USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(USERS_FILE, "w") as f:
-        json.dump(users, f, indent=2)
+    if not os.getenv("CLINIC_USERS_DATA"):
+        USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(USERS_FILE, "w") as f:
+            json.dump(users, f, indent=2)
 
 def verify_user(email, password):
     users = load_users()
@@ -59,7 +68,15 @@ def get_user(email):
     return users.get(email)
 
 def load_config():
-    """Load clinic configurations from JSON file"""
+    """Load clinic configurations from Env or JSON file"""
+    # Priority 1: Environment Variable (Cloud)
+    env_data = os.getenv("CLINIC_CONFIG_DATA")
+    if env_data:
+        try:
+            return json.loads(env_data)
+        except Exception as e:
+            print(f"Failed to parse CLINIC_CONFIG_DATA env var: {e}")
+
     if not CONFIG_FILE.exists():
         return {}
     
@@ -68,8 +85,9 @@ def load_config():
 
 def save_config(config):
     """Save clinic configurations to JSON file"""
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(config, f, indent=2)
+    if not os.getenv("CLINIC_CONFIG_DATA"):
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(config, f, indent=2)
 
 def get_all_clinics():
     """Get list of all clinics"""
