@@ -1,5 +1,6 @@
 import json
 import os
+import logging
 from pathlib import Path
 from datetime import datetime
 
@@ -9,10 +10,18 @@ CONFIG_FILE = CONFIG_DIR / "clinics.json"
 USERS_FILE = Path(os.getenv("CLINIC_USERS_FILE", PROJECT_ROOT / "users.json"))
 STATE_FILE = CONFIG_DIR / "state.json"
 
+def _clean_json_env(data):
+    """Helper to handle common copy-paste artifacts like extra quotes"""
+    if not data: return data
+    data = data.strip()
+    if data.startswith('"') and data.endswith('"'):
+        data = data[1:-1].strip()
+    return data
+
 # User management functions
 def load_users():
     # Priority 1: Environment Variable (Cloud)
-    env_data = os.getenv("CLINIC_USERS_DATA")
+    env_data = _clean_json_env(os.getenv("CLINIC_USERS_DATA"))
     if env_data:
         try:
             data = json.loads(env_data)
@@ -80,7 +89,7 @@ def get_user(email):
 def load_config():
     """Load clinic configurations from Env or JSON file"""
     # Priority 1: Environment Variable (Cloud)
-    env_data = os.getenv("CLINIC_CONFIG_DATA")
+    env_data = _clean_json_env(os.getenv("CLINIC_CONFIG_DATA"))
     if env_data:
         try:
             data = json.loads(env_data)

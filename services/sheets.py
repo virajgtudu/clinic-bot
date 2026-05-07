@@ -58,12 +58,42 @@ logger = logging.getLogger(__name__)
 
 
 def _credentials():
+    # 1. Try direct JSON from environment variables
     credentials_json = os.getenv("GOOGLE_CREDENTIALS") or os.getenv("GOOGLE_CREDENTIALS_JSON")
     if credentials_json:
-        return Credentials.from_service_account_info(json.loads(credentials_json), scopes=SCOPES)
+        try:
+            creds = Credentials.from_service_account_info(json.loads(credentials_json), scopes=SCOPES)
+            logger.info("Credentials loaded from environment variable (JSON)")
+            return creds
+        except Exception as e:
+            logger.error(f"Failed to load credentials from GOOGLE_CREDENTIALS env var: {e}")
 
-    credentials_file = Path(os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "credentials.json"))
-    return Credentials.from_service_account_file(credentials_file, scopes=SCOPES)
+    # 2. Try file path from environment variable or default
+    # We must be careful: sometimes users paste the JSON into GOOGLE_APPLICATION_CREDENTIALS by mistake
+    path_val = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "credentials.json")
+    
+    # If the path_val looks like JSON (starts with {), it's not a file path!
+    if path_val.strip().startswith("{"):
+        try:
+            logger.info("GOOGLE_APPLICATION_CREDENTIALS looks like JSON, attempting to parse...")
+            creds = Credentials.from_service_account_info(json.loads(path_val), scopes=SCOPES)
+            logger.info("Credentials loaded from GOOGLE_APPLICATION_CREDENTIALS (JSON)")
+            return creds
+        except Exception as e:
+            logger.error(f"Failed to parse GOOGLE_APPLICATION_CREDENTIALS as JSON: {e}")
+            return None
+
+    # Treat as actual file path
+    credentials_file = Path(path_val)
+    try:
+        if credentials_file.exists() and credentials_file.is_file():
+            logger.info(f"Loading credentials from file: {credentials_file}")
+            return Credentials.from_service_account_file(str(credentials_file), scopes=SCOPES)
+    except OSError as oe:
+        logger.error(f"OS error checking credentials file '{path_val[:30]}...': {oe}")
+    
+    logger.error("No valid Google credentials found (checked env and file)")
+    return None
 
 
 def get_client():
