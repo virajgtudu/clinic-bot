@@ -15,14 +15,24 @@ def load_users():
     env_data = os.getenv("CLINIC_USERS_DATA")
     if env_data:
         try:
-            return json.loads(env_data)
+            data = json.loads(env_data)
+            logging.info(f"Loaded users from CLINIC_USERS_DATA env var. Found {len(data)} users.")
+            return data
         except Exception as e:
-            print(f"Failed to parse CLINIC_USERS_DATA env var: {e}")
+            logging.error(f"Failed to parse CLINIC_USERS_DATA env var: {e}")
 
     if not USERS_FILE.exists():
+        logging.warning(f"Users file not found: {USERS_FILE}")
         return {}
-    with open(USERS_FILE, "r") as f:
-        return json.load(f)
+    
+    try:
+        with open(USERS_FILE, "r") as f:
+            data = json.load(f)
+            logging.info(f"Loaded users from local file: {USERS_FILE}")
+            return data
+    except Exception as e:
+        logging.error(f"Failed to read local users file: {e}")
+        return {}
 
 def save_users(users):
     if not os.getenv("CLINIC_USERS_DATA"):
@@ -73,15 +83,26 @@ def load_config():
     env_data = os.getenv("CLINIC_CONFIG_DATA")
     if env_data:
         try:
-            return json.loads(env_data)
+            data = json.loads(env_data)
+            logging.info(f"Loaded config from CLINIC_CONFIG_DATA env var. Found {len(data)} clinics.")
+            return data
         except Exception as e:
-            print(f"Failed to parse CLINIC_CONFIG_DATA env var: {e}")
+            logging.error(f"Failed to parse CLINIC_CONFIG_DATA env var: {e}")
+            logging.error(f"Env data start: {env_data[:50]}...")
 
+    # Priority 2: Local File
     if not CONFIG_FILE.exists():
+        logging.warning(f"Config file not found: {CONFIG_FILE}")
         return {}
     
-    with open(CONFIG_FILE, "r") as f:
-        return json.load(f)
+    try:
+        with open(CONFIG_FILE, "r") as f:
+            data = json.load(f)
+            logging.info(f"Loaded config from local file: {CONFIG_FILE}")
+            return data
+    except Exception as e:
+        logging.error(f"Failed to read local config file: {e}")
+        return {}
 
 def save_config(config):
     """Save clinic configurations to JSON file"""
@@ -103,12 +124,17 @@ def get_all_clinics():
 def get_clinic_by_phone_id(phone_number_id):
     """Get clinic by phone_number_id (primary key)"""
     config = load_config()
-    clinic = config.get(str(phone_number_id))
+    lookup_key = str(phone_number_id)
+    clinic = config.get(lookup_key)
+    
     if not clinic:
+        logging.warning(f"Clinic lookup failed for ID: '{lookup_key}'")
+        logging.info(f"Available keys in config: {list(config.keys())}")
         return None
+        
     item = dict(clinic)
-    item.setdefault("id", str(phone_number_id))
-    item.setdefault("phone_number_id", str(phone_number_id))
+    item.setdefault("id", lookup_key)
+    item.setdefault("phone_number_id", lookup_key)
     return item
 
 def get_clinic(clinic_id):
