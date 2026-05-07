@@ -4,6 +4,7 @@ credentials.json
 clinics.json
 config/clinics.json
 config.json
+users.json
 
 # Python
 __pycache__/
