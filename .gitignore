@@ -1,6 +1,9 @@
 # Secrets
 .env
 credentials.json
+clinics.json
+config/clinics.json
+config.json
 
 # Python
 __pycache__/
