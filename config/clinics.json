@@ -1,0 +1,106 @@
+{
+  "1132685746587083": {
+    "name": "Super Clinic",
+    "phone": "+91 87633 42554",
+    "address": "123 Main Road, City",
+    "webhook_verify_token": "clinic_bot_2024",
+    "subscription_status": "active",
+    "monthly_fee": 1500,
+    "created_date": "2026-01-01",
+    "expiry_date": "2026-12-31",
+    "doctors": [
+      {
+        "id": "d1",
+        "name": "Dr. Sharma",
+        "specialty": "General Physician",
+        "google_calendar_id": "b56355ccfb507f23a51bb55e89bd84069f36b12841cf9707947d0f07f1a1a33d@group.calendar.google.com",
+        "slots": [
+          "07:30 AM",
+          "08:00 AM",
+          "08:30 AM",
+          "09:00 AM",
+          "09:30 AM",
+          "06:00 PM",
+          "06:30 PM",
+          "07:00 PM",
+          "07:30 PM"
+        ],
+        "availability": {
+          "mode": "Scheduled Range",
+          "days": [
+            "Mon",
+            "Wed",
+            "Fri",
+            "Sat"
+          ],
+          "sessions": [
+            {
+              "start": "07:30 AM",
+              "end": "10:00 AM",
+              "interval": 30
+            },
+            {
+              "start": "06:00 PM",
+              "end": "08:00 PM",
+              "interval": 30
+            }
+          ]
+        }
+      },
+      {
+        "id": "d3",
+        "name": "Dr. Patel",
+        "specialty": "Dermatologist",
+        "slots": [
+          "10:30 AM",
+          "01:00 PM",
+          "04:00 PM",
+          "06:00 PM"
+        ]
+      },
+      {
+        "id": "d3",
+        "name": "Dr. Vikram Prakash",
+        "specialty": "Orthopedic",
+        "slots": [
+          "09:00 AM",
+          "10:00 AM",
+          "11:00 AM",
+          "03:30 PM",
+          "04:30 PM",
+          "05:30 PM"
+        ]
+      }
+    ],
+    "sheet_name": "super_clinic_bookings",
+    "medicines_sheet": "super_clinic_medicines",
+    "tests": [
+      {
+        "id": "t1",
+        "name": "Blood Test (Fasting)",
+        "instructions": "Fast for 8-12 hours. Only water allowed."
+      },
+      {
+        "id": "t2",
+        "name": "Ultrasound (Abdomen)",
+        "instructions": "Drink 4-5 glasses water 1 hour before."
+      },
+      {
+        "id": "t3",
+        "name": "X-Ray",
+        "instructions": "Remove all metal objects."
+      },
+      {
+        "id": "t4",
+        "name": "ECG",
+        "instructions": "Avoid caffeine before test."
+      }
+    ],
+    "whatsapp_token_env": "WHATSAPP_TOKEN_1132685746587083",
+    "phone_number_id": "1132685746587083",
+    "google_calendar_id": "",
+    "staff_numbers": [
+      "+91 8249766488"
+    ]
+  }
+}

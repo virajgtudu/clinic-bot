@@ -1,0 +1,11 @@
+{
+  "admin": {
+    "role": "admin",
+    "password": "wasd4321"
+  },
+  "super-clinic": {
+    "password": "qwer1234",
+    "role": "clinic",
+    "clinic_phone_id": "1132685746587083"
+  }
+}
