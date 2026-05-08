@@ -6,9 +6,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from config import get_all_clinics, get_clinic
+from config import get_all_clinics, get_clinic, get_now
 from services.sheets import MEDICINE_HEADERS, TEST_HEADERS, ensure_headers, open_sheet
-from services.whatsapp import send_text
+from services.whatsapp import send_text, send_buttons
 
 
 def get_active_tests(clinic):
@@ -19,7 +19,8 @@ def get_active_tests(clinic):
         ensure_headers(sheet, TEST_HEADERS)
         records = sheet.get_all_records()
 
-        today = datetime.now().date()
+        now = get_now()
+        today = now.date()
         tomorrow = today + timedelta(days=1)
 
         active = []
@@ -39,14 +40,15 @@ def get_active_tests(clinic):
 
 def send_test_reminders():
     """Main function to send test reminders"""
+    now = get_now()
     print(f"\n{'='*50}")
-    print(f"🧪 Running Test Reminder Check - {datetime.now().strftime('%d-%m-%Y %H:%M')}")
+    print(f"🧪 Running Test Reminder Check - {now.strftime('%d-%m-%Y %H:%M')}")
     print(f"{'='*50}")
 
     clinics = get_all_clinics()
-    today_str = datetime.now().strftime("%d-%m-%Y")
-    tomorrow_str = (datetime.now() + timedelta(days=1)).strftime("%d-%m-%Y")
-    current_hour = datetime.now().hour
+    today_str = now.strftime("%d-%m-%Y")
+    tomorrow_str = (now + timedelta(days=1)).strftime("%d-%m-%Y")
+    current_hour = now.hour
 
     for clinic in clinics:
         if clinic.get("subscription_status") != "active":
@@ -96,18 +98,21 @@ def send_test_reminders():
                     headers = sheet.row_values(1)
                     if "Last Sent" in headers:
                         col_idx = headers.index("Last Sent") + 1
-                        new_val = f"{type_sent} ({datetime.now().strftime('%d-%m-%Y %H:%M')})"
+                        new_val = f"{type_sent} ({get_now().strftime('%d-%m-%Y %H:%M')})"
                         sheet.update_cell(t['_row_idx'], col_idx, new_val)
                     print(f"      ✅ Sent {type_sent} reminder to {phone}")
                 except Exception as e:
                     print(f"      ⚠️ Sent but failed to update sheet: {e}")
 
-def send_whatsapp(clinic, phone, message):
-    """Send WhatsApp message"""
+def send_whatsapp(clinic, phone, message, buttons=None):
+    """Send WhatsApp message (text or interactive)"""
     if not clinic:
         return False
     try:
-        send_text(clinic, phone, message)
+        if buttons:
+            send_buttons(clinic, phone, message, buttons)
+        else:
+            send_text(clinic, phone, message)
         print(f"Sent to {phone}")
         return True
     except Exception as e:
@@ -139,7 +144,8 @@ def get_active_medicines(clinic):
                         start_date = datetime.strptime(s_val, "%d-%m-%Y").date()
                         end_date = datetime.strptime(e_val, "%d-%m-%Y").date()
                         
-                        today = datetime.now().date()
+                        now = get_now()
+                        today = now.date()
                         if start_date <= today <= end_date:
                             r['_row_idx'] = i + 2
                             r['_sheet_name'] = clinic.get("medicines_sheet")
@@ -177,15 +183,15 @@ def get_reminder_time(frequency):
 
 def send_medicine_reminders():
     """Main function to send medicine reminders"""
+    now = get_now()
     print(f"\n{'='*50}")
-    print(f"🏥 Running Medicine Reminder Check - {datetime.now().strftime('%d-%m-%Y %H:%M')}")
+    print(f"🏥 Running Medicine Reminder Check - {now.strftime('%d-%m-%Y %H:%M')}")
     print(f"{'='*50}")
     
     clinics = get_all_clinics()
     print(f"Found {len(clinics)} clinics")
     
-    today_str = datetime.now().strftime("%d-%m-%Y")
-    current_hour = datetime.now().hour
+    today_str = now.strftime("%d-%m-%Y")
     
     for clinic in clinics:
         if clinic.get("subscription_status") != "active":
@@ -208,19 +214,23 @@ def send_medicine_reminders():
             instructions = med.get("Instructions", "")
             last_sent = str(med.get("Last Sent", ""))
             
+            # Get times from Time 1, Time 2, Time 3 columns
             configured_times = []
-            configured_times.extend([
-                str(med.get("Time 1", "")).strip(), 
-                str(med.get("Time 2", "")).strip(),
-                str(med.get("Time 3", "")).strip()
-            ])
+            for i in range(1, 4):
+                val = str(med.get(f"Time {i}", "")).strip()
+                if val:
+                    configured_times.append(val)
+            
+            # Check instructions for override
             if "Reminder Times:" in instructions:
                 match = re.search(r"Reminder Times:\s*(.*)", instructions)
                 if match:
-                    configured_times.extend([item.strip() for item in match.group(1).split(",") if item.strip()])
-            configured_times = [t for t in configured_times if t]
-            
-            reminder_times = configured_times or get_reminder_time(frequency)
+                    instruction_times = [item.strip() for item in match.group(1).split(",") if item.strip()]
+                    if instruction_times:
+                        configured_times = instruction_times
+
+            # Fallback to frequency-based defaults if no times configured
+            reminder_times = configured_times if configured_times else get_reminder_time(frequency)
             
             sheet = None
             for reminder_time in reminder_times:
@@ -245,7 +255,7 @@ def send_medicine_reminders():
                 # Unique ID for this specific dose today
                 dose_id = f"{today_str}@{reminder_hour:02d}:{reminder_minute:02d}"
                 
-                current_time = datetime.now()
+                current_time = get_now()
                 current_hour = current_time.hour
                 current_minute = current_time.minute
                 
@@ -264,11 +274,15 @@ def send_medicine_reminders():
                         f"💊 *Medicine Reminder*\n\n"
                         f"Time to take your medicines ({reminder_time}):\n- " + "\n- ".join([m.strip() for m in medicine_name.split(",") if m.strip()]) + "\n\n"
                         f"⏰ Time: {reminder_time}"
-                        f"{tests_line}\n\n"
-                        f"Reply:\n1️⃣ Taken\n2️⃣ Skip"
+                        f"{tests_line}"
                     )
                     
-                    if send_whatsapp(clinic, phone, msg):
+                    buttons = [
+                        {"id": "med_taken", "title": "Taken ✅"},
+                        {"id": "med_skip", "title": "Skip ⏭️"}
+                    ]
+                    
+                    if send_whatsapp(clinic, phone, msg, buttons=buttons):
                         sent_count += 1
                         try:
                             if not sheet:
@@ -293,16 +307,21 @@ def send_medicine_reminders():
 
 def send_appointment_reminders():
     """Send appointment reminders for tomorrow"""
+    now = get_now()
     print(f"\n🏥 Checking for appointment reminders...")
     
     clinics = get_all_clinics()
-    tomorrow = (datetime.now() + timedelta(days=1)).strftime("%d-%m-%Y")
+    tomorrow = (now + timedelta(days=1)).strftime("%d-%m-%Y")
     
     for clinic in clinics:
         if clinic.get("subscription_status") != "active":
             continue
         
-        sheet = get_sheet(clinic.get("sheet_name"))
+        sheet_name = clinic.get("sheet_name")
+        if not sheet_name:
+            continue
+            
+        sheet = open_sheet(sheet_name)
         if not sheet:
             continue
         
@@ -313,7 +332,7 @@ def send_appointment_reminders():
                 if r.get('Date') == tomorrow and r.get('Status') == 'Confirmed':
                     phone = r.get('Phone', '')
                     name = r.get('Name', 'Patient')
-                    time = r.get('Time', '')
+                    time_val = r.get('Time', '')
                     doctor = r.get('Doctor', '')
                     token = r.get('Token', '')
                     
@@ -321,7 +340,7 @@ def send_appointment_reminders():
                         f"⏰ Appointment Reminder\n\n"
                         f"Hi {name}, this is a reminder for your appointment tomorrow:\n\n"
                         f"📅 Date: {tomorrow}\n"
-                        f"🕐 Time: {time}\n"
+                        f"🕐 Time: {time_val}\n"
                         f"👨‍⚕️ Doctor: {doctor}\n"
                         f"🔖 Token: {token}\n\n"
                         f"Please arrive 15 minutes early.\n"
@@ -342,12 +361,12 @@ def run_scheduler(interval_minutes=1):
     
     while True:
         try:
-            print(f"\n--- 🕒 Scheduler Pulse: {datetime.now().strftime('%d-%m-%Y %H:%M:%S')} ---")
+            now = get_now()
+            print(f"\n--- 🕒 Scheduler Pulse: {now.strftime('%d-%m-%Y %H:%M:%S')} ---")
             send_medicine_reminders()
             send_test_reminders()
             
-            current_hour = datetime.now().hour
-            if current_hour == 18:
+            if now.hour == 18 and now.minute < interval_minutes:
                 send_appointment_reminders()
             
             print(f"💤 Sleeping for {interval_minutes} minutes...")

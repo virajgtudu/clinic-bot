@@ -1,4 +1,6 @@
 import os
+from datetime import datetime
+from config import get_now
 
 
 def create_calendar_event(clinic, booking):
@@ -77,7 +79,7 @@ def sync_doctor_sessions(clinic, doctor):
             
             # Create a start date that matches one of the selected days to initialize the recurrence
             # For simplicity, we use today's date and let Google handle the rest
-            today = datetime.now()
+            today = get_now()
             start_dt = datetime.strptime(f"{today.strftime('%Y-%m-%d')} {start_t}", "%Y-%m-%d %I:%M %p")
             end_dt = datetime.strptime(f"{today.strftime('%Y-%m-%d')} {end_t}", "%Y-%m-%d %I:%M %p")
             

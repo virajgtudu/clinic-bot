@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from config import get_all_clinics, get_clinic, get_clinic_stats, add_clinic, update_clinic, delete_clinic
+from config import get_all_clinics, get_clinic, get_clinic_stats, add_clinic, update_clinic, delete_clinic, get_now
 from services.sheets import open_sheet
 
 st.set_page_config(
@@ -199,10 +199,10 @@ with tab3:
                     "address": c_address,
                     "whatsapp_token": c_token,
                     "phone_number_id": c_phone_id,
-                    "webhook_verify_token": f"clinic_bot_{datetime.now().strftime('%Y%m%d')}",
+                    "webhook_verify_token": f"clinic_bot_{get_now().strftime('%Y%m%d')}",
                     "subscription_status": c_status,
                     "monthly_fee": c_fee,
-                    "created_date": datetime.now().strftime("%Y-%m-%d"),
+                    "created_date": get_now().strftime("%Y-%m-%d"),
                     "expiry_date": c_expiry.strftime("%Y-%m-%d"),
                     "doctors": doctors,
                     "sheet_name": f"{c_name.lower().replace(' ', '_')}_bookings",

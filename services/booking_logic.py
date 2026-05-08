@@ -7,6 +7,7 @@ from pathlib import Path
 from services.calendar import create_calendar_event
 from services.sheets import MEDICINE_HEADERS, append_booking, append_medicine, append_test, append_followup, ensure_headers, open_sheet
 from services.whatsapp import send_buttons, send_list, send_text
+from config import get_now
 
 
 TOKEN_FILE = Path(__file__).resolve().parent.parent / "daily_token.json"
@@ -30,16 +31,26 @@ def _save_token_state(state):
         json.dump(state, f, indent=2)
 
 
-def get_next_token(clinic_id, prefix="APPT"):
-    today = datetime.now().strftime("%Y-%m-%d")
-    state = _load_token_state()
-    if state.get("date") != today:
-        state = {"date": today, "clinics": {}}
-
-    clinics = state.setdefault("clinics", {})
-    clinics[str(clinic_id)] = int(clinics.get(str(clinic_id), 0)) + 1
-    _save_token_state(state)
-    return f"#{prefix}-{clinics[str(clinic_id)]:03d}"
+def get_next_token_from_sheet(clinic, date_str, doctor_name):
+    """Generate sequential token for a specific doctor and date from GSheet"""
+    try:
+        sheet = open_sheet(clinic.get("sheet_name"), clinic.get("sheet_id"))
+        records = sheet.get_all_records()
+        
+        # Filter for same date and doctor
+        count = 0
+        for r in records:
+            if str(r.get("Date")) == date_str and str(r.get("Doctor")) == doctor_name:
+                count += 1
+        
+        next_num = count + 1
+        # Use doctor's first 2 letters as prefix
+        prefix = "".join([c for c in doctor_name if c.isalnum()])[:2].upper()
+        return f"{prefix}-{next_num:03d}"
+    except Exception as e:
+        logger.error(f"Error generating token from sheet: {e}")
+        # Fallback to simple timestamp-based token if sheet fails
+        return f"TK-{int(get_now().timestamp()) % 1000:03d}"
 
 
 def _clinic_name(clinic):
@@ -73,8 +84,9 @@ def _is_doctor_available_on(doctor, date_obj):
 
 def _date_options(doctor, days=7):
     dates = []
+    now = get_now()
     for offset in range(days):
-        value = datetime.now() + timedelta(days=offset)
+        value = now + timedelta(days=offset)
         if not _is_doctor_available_on(doctor, value):
             continue
             
@@ -149,7 +161,7 @@ def _has_active_prescription_session(clinic, phone):
         sheet = open_sheet(clinic.get("sheet_name"), clinic.get("sheet_id"))
         rows = sheet.get_all_records()
         normalized_phone = _normalize_phone(phone)
-        now = datetime.now()
+        now = get_now()
         completed_patients = []
         for row in reversed(rows):
             if _normalize_phone(row.get("Phone")) == normalized_phone:
@@ -303,7 +315,8 @@ def _handle_patient_reminder_flow(clinic, phone, text, raw_text, key, session):
             send_text(clinic, phone, "Enter a valid number of days (1-10)")
             return True
         
-        start_date = datetime.now()
+        now = get_now()
+        start_date = now
         end_date = start_date + timedelta(days=days - 1)
         full_name = session.get("verified_name")
         
@@ -313,22 +326,25 @@ def _handle_patient_reminder_flow(clinic, phone, text, raw_text, key, session):
             f"Set by Patient (Verified Session)",
         ]
         
+        times = session.get("times", [])
         append_medicine(
             clinic,
             [
-                phone,
-                session.get("medicine"),
-                "Patient set",
-                session.get("freq_label"),
-                days,
-                start_date.strftime("%d-%m-%Y"),
-                end_date.strftime("%d-%m-%Y"),
-                "\n".join(instruction_lines),
-                "Active",
-                datetime.now().strftime("%d-%m-%Y %H:%M"),
-                "PatientPlan",
-                session.get("times")[0],
-                session.get("times")[1] if len(session.get("times")) > 1 else "",
+                phone,                          # Col 2: Phone
+                session.get("medicine"),        # Col 3: Medicine
+                "Patient set",                  # Col 4: Dosage
+                session.get("freq_label"),       # Col 5: Frequency
+                days,                           # Col 6: Duration
+                start_date.strftime("%d-%m-%Y"), # Col 7: Start Date
+                end_date.strftime("%d-%m-%Y"),   # Col 8: End Date
+                "\n".join(instruction_lines),   # Col 9: Instructions
+                "Active",                       # Col 10: Status
+                now.strftime("%d-%m-%Y %H:%M"),  # Col 11: Created At
+                "PatientPlan",                  # Col 12: Type
+                times[0] if len(times) > 0 else "09:00", # Col 13: Time 1
+                times[1] if len(times) > 1 else "",      # Col 14: Time 2
+                times[2] if len(times) > 2 else "",      # Col 15: Time 3
+                ""                              # Col 16: Appointment ID (Empty for patient set)
             ],
         )
         
@@ -371,9 +387,9 @@ def _is_staff_sender(clinic, phone):
 
 def _staff_frequency_details(choice):
     mapping = {
-        "1": ("Once", ["08:00 AM"]),
-        "2": ("Twice", ["08:00 AM", "08:00 PM"]),
-        "3": ("Thrice", ["08:00 AM", "02:00 PM", "08:00 PM"]),
+        "1": ("Once", ["09:00"]),
+        "2": ("Twice", ["09:00", "21:00"]),
+        "3": ("Thrice", ["09:00", "14:00", "21:00"]),
     }
     return mapping.get(choice)
 
@@ -381,7 +397,8 @@ def _staff_frequency_details(choice):
 def _parse_dd_mm(value):
     value = value.strip()
     parsed = datetime.strptime(value, "%d-%m")
-    return parsed.replace(year=datetime.now().year)
+    now = get_now()
+    return parsed.replace(year=now.year)
 
 
 def _staff_summary(session):
@@ -413,6 +430,7 @@ def _show_staff_panel(clinic, phone):
 
 
 def _save_staff_reminder(clinic, session):
+    now = get_now()
     medicines = session.get("medicines", [])
     tests = session.get("tests", [])
     patient_name = session.get("patient_name")
@@ -435,19 +453,21 @@ def _save_staff_reminder(clinic, session):
     append_medicine(
         clinic,
         [
-            patient_phone,
-            ", ".join(medicines),
-            "Staff configured",
-            frequency_label,
-            duration_days,
-            start_date,
-            end_date,
-            "\n".join(instruction_lines),
-            "Active",
-            datetime.now().strftime("%d-%m-%Y %H:%M"),
-            "StaffPlan",
-            reminder_times[0] if reminder_times else "08:00 AM",
-            reminder_times[1] if len(reminder_times) > 1 else "",
+            patient_phone,                  # Col 2: Phone
+            ", ".join(medicines),           # Col 3: Medicine
+            "Staff configured",             # Col 4: Dosage
+            frequency_label,                # Col 5: Frequency
+            duration_days,                  # Col 6: Duration
+            start_date,                     # Col 7: Start Date
+            end_date,                       # Col 8: End Date
+            "\n".join(instruction_lines),   # Col 9: Instructions
+            "Active",                       # Col 10: Status
+            now.strftime("%d-%m-%Y %H:%M"),  # Col 11: Created At
+            "StaffPlan",                    # Col 12: Type
+            reminder_times[0] if len(reminder_times) > 0 else "09:00", # Col 13: Time 1
+            reminder_times[1] if len(reminder_times) > 1 else "",      # Col 14: Time 2
+            reminder_times[2] if len(reminder_times) > 2 else "",      # Col 15: Time 3
+            ""                              # Col 16: Appointment ID
         ],
     )
     
@@ -461,7 +481,7 @@ def _save_staff_reminder(clinic, session):
                 start_date, # Or maybe a specific test date? For now using start_date
                 f"Prescribed for {full_name} by staff",
                 "Active",
-                datetime.now().strftime("%d-%m-%Y %H:%M")
+                now.strftime("%d-%m-%Y %H:%M")
             ]
         )
 
@@ -648,7 +668,8 @@ def _handle_staff_flow(clinic, phone, text, raw_text, key, session):
         except ValueError:
             send_text(clinic, phone, "Enter a valid number of days")
             return True
-        start_date = datetime.now()
+        now = get_now()
+        start_date = now
         end_date = start_date + timedelta(days=days - 1)
         user_sessions[key] = {
             **session,
@@ -738,6 +759,74 @@ def _parse_booking_datetimes(date_value, selected_time):
     return start.isoformat(), end.isoformat()
 
 
+def _get_queue_status_info(clinic, phone):
+    """Calculate queue position and now-serving info from GSheet"""
+    try:
+        sheet = open_sheet(clinic.get("sheet_name"), clinic.get("sheet_id"))
+        records = sheet.get_all_records()
+        now = get_now()
+        today = now.strftime("%d-%m-%Y")
+        normalized_phone = _normalize_phone(phone)
+        
+        # Find patient's active booking for today
+        patient_booking = None
+        for r in reversed(records):
+            if str(r.get("Date")) == today and _normalize_phone(r.get("Phone")) == normalized_phone:
+                if r.get("Status") not in ["Cancelled", "Completed"]:
+                    patient_booking = r
+                    break
+        
+        if not patient_booking:
+            return "No active appointments found for today."
+            
+        doctor = patient_booking.get("Doctor")
+        patient_token = patient_booking.get("Token")
+        
+        # Filter all bookings for this doctor today
+        today_queue = []
+        for r in records:
+            if str(r.get("Date")) == today and r.get("Doctor") == doctor:
+                today_queue.append(r)
+        
+        # Find currently serving
+        serving_token = "Not started"
+        serving_idx = -1
+        
+        # Sort queue by Booked At or Token if possible (assuming sequential entry)
+        # For simplicity, we use the order in sheet
+        for idx, r in enumerate(today_queue):
+            if r.get("Status") == "Serving":
+                serving_token = r.get("Token")
+                serving_idx = idx
+            elif r.get("Status") == "Completed":
+                serving_idx = idx
+        
+        # Find patient position
+        patient_idx = -1
+        for idx, r in enumerate(today_queue):
+            if r.get("Token") == patient_token:
+                patient_idx = idx
+                break
+        
+        if patient_idx == -1:
+            return f"Your appointment (Token: {patient_token}) was not found in the active queue."
+            
+        ahead = max(0, patient_idx - serving_idx - 1)
+        
+        status_msg = (
+            f"🏥 *{clinic.get('name')} Queue*\n\n"
+            f"Doctor: {doctor}\n"
+            f"Your Token: *{patient_token}*\n"
+            f"Now Serving: *{serving_token}*\n"
+            f"Patients Ahead: {ahead}\n\n"
+            f"⏳ Estimated wait: {ahead * 15} mins"
+        )
+        return status_msg
+    except Exception as e:
+        logger.error(f"Error getting queue status: {e}")
+        return "Sorry, I couldn't retrieve the queue status right now."
+
+
 def handle_message(clinic, message):
     clinic_id = clinic["phone_number_id"]
     phone = message.get("from")
@@ -754,10 +843,23 @@ def handle_message(clinic, message):
         if _handle_staff_flow(clinic, phone, text, raw_text, key, session):
             return
     
+    if text == "status":
+        status_msg = _get_queue_status_info(clinic, phone)
+        send_text(clinic, phone, status_msg)
+        return
+
     if text == "med_confirm":
         send_text(clinic, phone, "✅ Thank you for confirming! Your reminders are active.")
         return
     
+    if text in {"med_taken", "1"}:
+        send_text(clinic, phone, "✅ Great! Medicine taken. We will remind you for the next dose.")
+        return
+
+    if text in {"med_skip", "2"}:
+        send_text(clinic, phone, "⏭️ Medicine skipped. Please try to take it on time if possible. We will remind you for the next dose.")
+        return
+
     if text == "med_cancel":
         count = _cancel_staff_reminders(clinic, phone)
         send_text(clinic, phone, f"❌ Your medicine reminders have been cancelled as requested ({count} removed).")
@@ -919,8 +1021,10 @@ def handle_message(clinic, message):
 
     if step == "confirm" and text == "confirm":
         doctor = session.get("doctor", {})
-        token = get_next_token(clinic_id, clinic.get("token_prefix", "APPT"))
-        booked_at = datetime.now().strftime("%d-%m-%Y %H:%M")
+        date_val = session.get("date_value")
+        token = get_next_token_from_sheet(clinic, date_val, doctor.get("name"))
+        now = get_now()
+        booked_at = now.strftime("%d-%m-%Y %H:%M")
         full_name = f"{session.get('name')} ({session.get('age')})"
 
         try:
@@ -929,12 +1033,12 @@ def handle_message(clinic, message):
                 [
                     full_name,
                     phone,
-                    session.get("date_value"),
+                    date_val,
                     session.get("selected_time"),
                     doctor.get("name"),
                     doctor.get("specialty"),
                     token,
-                    "Confirmed",
+                    "Pending",
                     booked_at,
                 ],
             )
@@ -944,7 +1048,7 @@ def handle_message(clinic, message):
             return
 
         try:
-            start_datetime, end_datetime = _parse_booking_datetimes(session.get("date_value"), session.get("selected_time"))
+            start_datetime, end_datetime = _parse_booking_datetimes(date_val, session.get("selected_time"))
             create_calendar_event(
                 clinic,
                 {
@@ -965,17 +1069,17 @@ def handle_message(clinic, message):
             clinic,
             phone,
             (
-                "Booking confirmed.\n\n"
-                f"Token: {token}\n"
-                f"Name: {full_name}\n"
-                f"Doctor: {doctor.get('name')}\n"
-                f"Date: {session.get('date_display')}\n"
-                f"Time: {session.get('selected_time')}\n\n"
+                "✅ Booking confirmed!\n\n"
+                f"📅 Date: {session.get('date_display')}\n"
+                f"🎫 Token: *{token}*\n"
+                f"👨‍⚕️ Doctor: {doctor.get('name')}\n"
+                f"🕐 Time: {session.get('selected_time')}\n\n"
+                "You can reply 'status' anytime to check your queue position.\n"
                 "Please arrive 15 minutes early."
             ),
             [
+                {"id": "status", "title": "Check Queue 📍"},
                 {"id": "new", "title": "New booking"},
-                {"id": "reschedule", "title": "Reschedule"},
                 {"id": "cancel", "title": "Cancel"},
             ],
         )

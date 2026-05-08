@@ -9,6 +9,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from routes.webhook import webhook_bp
 from scheduler import send_medicine_reminders, send_test_reminders, send_appointment_reminders
+from config import get_now
 
 
 load_dotenv()
@@ -17,13 +18,14 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 def run_scheduled_tasks():
     """Wrapper to run all scheduled tasks"""
-    logging.info("⏰ Running scheduled tasks pulse...")
+    now = get_now()
+    logging.info(f"⏰ Running scheduled tasks pulse... (IST: {now.strftime('%H:%M')})")
     try:
         send_medicine_reminders()
         send_test_reminders()
         
-        # Appointment reminders run once a day at 18:00 (6 PM)
-        if datetime.now().hour == 18:
+        # Appointment reminders run once a day at 18:00 (6 PM) IST
+        if now.hour == 18:
             send_appointment_reminders()
     except Exception as e:
         logging.error(f"Error in scheduled tasks: {e}")

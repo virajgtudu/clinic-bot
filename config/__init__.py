@@ -3,12 +3,18 @@ import os
 import logging
 from pathlib import Path
 from datetime import datetime
+import pytz
 
 CONFIG_DIR = Path(__file__).parent
 PROJECT_ROOT = CONFIG_DIR.parent
 CONFIG_FILE = CONFIG_DIR / "clinics.json"
 USERS_FILE = Path(os.getenv("CLINIC_USERS_FILE", PROJECT_ROOT / "users.json"))
 STATE_FILE = CONFIG_DIR / "state.json"
+
+def get_now():
+    """Get current time in IST (naive for compatibility)"""
+    ist = pytz.timezone("Asia/Kolkata")
+    return datetime.now(ist).replace(tzinfo=None)
 
 def _clean_json_env(data):
     """Helper to handle common copy-paste artifacts like extra quotes"""

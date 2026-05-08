@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 logger = logging.getLogger(__name__)
 
 sys.path.insert(0, str(Path(__file__).parent))
-from config import get_all_clinics, get_clinic, get_current_clinic, set_current_clinic, get_clinic_stats, add_clinic, update_clinic, delete_clinic
+from config import get_all_clinics, get_clinic, get_current_clinic, set_current_clinic, get_clinic_stats, add_clinic, update_clinic, delete_clinic, get_now
 from config import verify_user, add_user, update_password, delete_user, get_user, load_users
 from services.whatsapp import get_access_token, send_text, send_buttons
 from services.sheets import (
@@ -65,7 +65,7 @@ if "temp_appointment_id" not in st.session_state:
 if "temp_duration" not in st.session_state:
     st.session_state.temp_duration = 5
 if "temp_start_date" not in st.session_state:
-    st.session_state.temp_start_date = datetime.now().date()
+    st.session_state.temp_start_date = get_now().date()
 
 
 def get_auto_times(frequency):
@@ -541,10 +541,10 @@ def show_admin_panel():
                         "address": c_address,
                         "whatsapp_token_env": c_token_env,
                         "phone_number_id": c_phone_id,
-                        "webhook_verify_token": f"clinic_bot_{datetime.now().strftime('%Y%m%d')}",
+                        "webhook_verify_token": f"clinic_bot_{get_now().strftime('%Y%m%d')}",
                         "subscription_status": c_status,
                         "monthly_fee": c_fee,
-                        "created_date": datetime.now().strftime("%Y-%m-%d"),
+                        "created_date": get_now().strftime("%Y-%m-%d"),
                         "expiry_date": c_expiry.strftime("%Y-%m-%d"),
                         "doctors": doctors,
                         "sheet_name": f"{c_name.lower().replace(' ', '_')}_bookings",
@@ -565,9 +565,9 @@ def show_admin_panel():
 def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=None):
     if tests is None: tests = pd.DataFrame()
     if followups is None: followups = pd.DataFrame()
-    today = datetime.now().strftime("%d-%m-%Y")
-    tomorrow = (datetime.now() + timedelta(days=1)).strftime("%d-%m-%Y")
-    next_week = [(datetime.now() + timedelta(days=i)).strftime("%d-%m-%Y") for i in range(7)]
+    today = get_now().strftime("%d-%m-%Y")
+    tomorrow = (get_now() + timedelta(days=1)).strftime("%d-%m-%Y")
+    next_week = [(get_now() + timedelta(days=i)).strftime("%d-%m-%Y") for i in range(7)]
     
     with st.sidebar:
         st.markdown(f"## 🏥 {clinic['name']}")
@@ -683,8 +683,52 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                 today_filtered = today_df
                 if doctor_filter != "All Doctors":
                     today_filtered = today_df[today_df['Doctor'] == doctor_filter] if 'Doctor' in today_df.columns else today_df
-                
+
+                # --- NEXT PATIENT LOGIC ---
+                col_next_p, _ = st.columns([1, 3])
+                with col_next_p:
+                    if st.button("⏭️ Next Patient", use_container_width=True, help="Mark current as Completed and next as Serving"):
+                        # Logic: Find current 'Serving', mark Completed. Find first 'Pending', mark Serving.
+                        try:
+                            # We need the most recent data from the sheet for this
+                            sheet = get_sheet_local(clinic["sheet_name"])
+                            records = sheet.get_all_records()
+
+                            serving_token = None
+                            next_pending_token = None
+
+                            # Filter for today and doctor
+                            today_str = get_now().strftime("%d-%m-%Y")
+                            doctor = doctor_filter if doctor_filter != "All Doctors" else None
+
+                            for r in records:
+                                if str(r.get("Date")) == today_str:
+                                    if doctor and r.get("Doctor") != doctor:
+                                        continue
+
+                                    if r.get("Status") == "Serving":
+                                        serving_token = r.get("Token")
+                                    elif r.get("Status") == "Pending" and next_pending_token is None:
+                                        next_pending_token = r.get("Token")
+
+                            if serving_token:
+                                update_booking_status_in_sheet(clinic, serving_token, "Completed")
+
+                            if next_pending_token:
+                                update_booking_status_in_sheet(clinic, next_pending_token, "Serving")
+                                st.success(f"Now serving: {next_pending_token}")
+                                st.rerun()
+                            elif serving_token:
+                                st.info("Queue finished!")
+                                st.rerun()
+                            else:
+                                st.warning("No pending patients found.")
+                        except Exception as e:
+                            st.error(f"Error updating queue: {e}")
+                # ---------------------------
+
                 for idx, row in today_filtered.iterrows():
+
                     with st.container(border=True):
                         c1, c2, c3, c4, c5, c6, c7, c8 = st.columns([2, 2, 1, 0.8, 0.6, 0.6, 0.6, 0.6])
                         
@@ -718,6 +762,7 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                                 st.session_state.temp_appointment_id = token
                                 st.session_state.reminder_step = 2
                                 st.session_state.reminder_expanded = True
+                                st.session_state.reminder_type_radio = "Medicine" # Ensure radio matches
                                 st.session_state.active_main_tab = "💊 Medicines" # Switch to Medicines tab
                                 st.rerun()
 
@@ -725,8 +770,8 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                             current_status = row.get('Status', 'Confirmed')
                             status_choice = st.selectbox(
                                 "Status",
-                                ["Confirmed", "Completed", "Cancelled"],
-                                index=["Confirmed", "Completed", "Cancelled"].index(current_status) if current_status in ["Confirmed", "Completed", "Cancelled"] else 0,
+                                ["Pending", "Serving", "Completed", "Cancelled"],
+                                index=["Pending", "Serving", "Completed", "Cancelled"].index(current_status) if current_status in ["Pending", "Serving", "Completed", "Cancelled"] else 0,
                                 key=f"status_select_{idx}",
                                 label_visibility="collapsed",
                             )
@@ -749,7 +794,7 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                                     selected_test = st.selectbox("If any test required", test_options)
                                     
                                     if st.form_submit_button("Set Reminder"):
-                                        followup_date = (datetime.now() + timedelta(days=days_after)).strftime('%d-%m-%Y')
+                                        followup_date = (get_now() + timedelta(days=days_after)).strftime('%d-%m-%Y')
                                         test_instr = ""
                                         if selected_test != "None":
                                             for t in clinic.get('tests', []):
@@ -765,7 +810,7 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                                                 followup_date,
                                                 final_msg,
                                                 "Pending",
-                                                datetime.now().strftime("%d-%m-%Y %H:%M")
+                                                get_now().strftime("%d-%m-%Y %H:%M")
                                             ])
                                             st.success(f"Reminder set for {followup_date}!")
                                         except Exception as e:
@@ -779,7 +824,7 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                 with a1:
                     new_name = st.text_input("Patient Name*", placeholder="Rajesh Kumar")
                     new_phone = st.text_input("Phone*", placeholder="919876543210")
-                    new_date = st.date_input("Date*", datetime.now())
+                    new_date = st.date_input("Date*", get_now())
                 with a2:
                     doctor_options = [d["name"] for d in clinic.get("doctors", [])]
                     new_doctor = st.selectbox("Doctor*", doctor_options if doctor_options else ["Dr. Sharma", "Dr. Verma", "Dr. Patel"])
@@ -793,9 +838,11 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                     else:
                         spec_map = {d["name"]: d["specialty"] for d in clinic.get("doctors", [])}
                         spec = spec_map.get(new_doctor, "General Physician")
-                        token = f"#SC-{int(datetime.now().timestamp()) % 10000:03d}"
+                        date_str = new_date.strftime('%d-%m-%Y')
+                        from services.booking_logic import get_next_token_from_sheet
+                        token = get_next_token_from_sheet(clinic, date_str, new_doctor)
                         
-                        msg = f"✅ Confirmed!\n\nPatient: {new_name}\nDate: {new_date.strftime('%d-%m-%Y')}\nTime: {new_time}\nDoctor: {new_doctor} ({spec})\nToken: {token}\n\nReply CANCEL to reschedule."
+                        msg = f"✅ Confirmed!\n\nPatient: {new_name}\nDate: {date_str}\nTime: {new_time}\nDoctor: {new_doctor} ({spec})\nToken: {token}\n\nReply CANCEL to reschedule."
                         
                         if send_whatsapp(clinic, new_phone, msg):
                             try:
@@ -808,7 +855,7 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                                     spec,
                                     token,
                                     new_status,
-                                    datetime.now().strftime("%d-%m-%Y %H:%M")
+                                    get_now().strftime("%d-%m-%Y %H:%M")
                                 ])
                                 try:
                                     start_dt = datetime.strptime(f"{new_date.strftime('%d-%m-%Y')} {new_time}", "%d-%m-%Y %I:%M %p")
@@ -1060,7 +1107,7 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                                     end_date_str,
                                     f"Added via dashboard. Ref: {st.session_state.temp_appointment_id}",
                                     "Active",
-                                    datetime.now().strftime("%d-%m-%Y %H:%M"),
+                                    get_now().strftime("%d-%m-%Y %H:%M"),
                                     "Medicine",
                                     med['times'][0] if len(med['times']) > 0 else "09:00",
                                     med['times'][1] if len(med['times']) > 1 else "",
@@ -1102,7 +1149,7 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                     
                     t1, t2 = st.columns(2)
                     with t1:
-                        test_date = st.date_input("Test Date", datetime.now())
+                        test_date = st.date_input("Test Date", get_now())
                     with t2:
                         test_time = st.time_input("Test Time", value=datetime.strptime("09:00", "%H:%M").time())
                     
@@ -1131,7 +1178,7 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                                         test_date.strftime('%d-%m-%Y'),
                                         med_instructions + (f"\n\nInstructions: {test_instr}" if test_instr else ""),
                                         "Active",
-                                        datetime.now().strftime("%d-%m-%Y %H:%M")
+                                        get_now().strftime("%d-%m-%Y %H:%M")
                                     ])
                                     st.success("Test reminder scheduled!")
                                     st.rerun()
@@ -1145,7 +1192,7 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                     
                     f1, f2 = st.columns(2)
                     with f1:
-                        med_start = st.date_input("Follow-up Date", datetime.now() + timedelta(days=7))
+                        med_start = st.date_input("Follow-up Date", get_now() + timedelta(days=7))
                     with f2:
                         time1 = st.time_input("Preferred Time", value=datetime.strptime("10:00", "%H:%M").time())
                     
@@ -1172,7 +1219,7 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                                         med_start.strftime('%d-%m-%Y'),
                                         med_instructions,
                                         "Pending",
-                                        datetime.now().strftime("%d-%m-%Y %H:%M")
+                                        get_now().strftime("%d-%m-%Y %H:%M")
                                     ])
                                     st.success("Follow-up reminder set!")
                                     st.rerun()
@@ -1185,13 +1232,13 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
         active_meds = medicines[medicines['Status'] == 'Active'] if 'Status' in medicines.columns else pd.DataFrame()
         if not active_meds.empty:
             # Filter for today
-            today_str = datetime.now().strftime("%d-%m-%Y")
+            today_str = get_now().strftime("%d-%m-%Y")
             # Only show if today is between start and end date
             def is_today_active(row):
                 try:
                     start = datetime.strptime(row['Start Date'], "%d-%m-%Y").date()
                     end = datetime.strptime(row['End Date'], "%d-%m-%Y").date()
-                    return start <= datetime.now().date() <= end
+                    return start <= get_now().date() <= end
                 except: return False
             
             active_today = active_meds[active_meds.apply(is_today_active, axis=1)]
