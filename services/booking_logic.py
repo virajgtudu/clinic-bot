@@ -106,8 +106,33 @@ def _date_rows(dates):
     ]
 
 
-def _slot_rows(slots):
-    return [{"id": f"slot_{index}", "title": slot[:24]} for index, slot in enumerate(slots)]
+def _slot_rows(slots, offset=0):
+    limit = 10
+    if len(slots) <= limit:
+        return [{"id": f"slot_{i}", "title": slots[i][:24]} for i in range(len(slots))]
+    
+    # Pagination logic
+    # If we are at the start, show 9 slots + 1 "Next"
+    if offset == 0:
+        rows = [{"id": f"slot_{i}", "title": slots[i][:24]} for i in range(9)]
+        rows.append({"id": "slots_next_9", "title": "Next slots ➡️"})
+        return rows
+    
+    # If we are in the middle/end, show "Prev" + up to 8 slots + "Next"
+    rows = [{"id": f"slots_prev_{max(0, offset - 9)}", "title": "⬅️ Previous"}]
+    
+    # Calculate how many slots we can show
+    remaining = len(slots) - offset
+    if remaining <= 9: # Can fit all remaining + Prev
+        for i in range(offset, len(slots)):
+            rows.append({"id": f"slot_{i}", "title": slots[i][:24]})
+    else:
+        # Show 8 slots + Prev + Next
+        for i in range(offset, offset + 8):
+            rows.append({"id": f"slot_{i}", "title": slots[i][:24]})
+        rows.append({"id": f"slots_next_{offset + 8}", "title": f"Next slots ➡️"})
+    
+    return rows
 
 
 def _extract_text(message):
@@ -976,13 +1001,23 @@ def handle_message(clinic, message):
         send_list(clinic, phone, f"Select time for {selected_date['display']}", [{"title": "Time slots", "rows": _slot_rows(slots)}])
         return
 
-    if step == "select_slot" and text.startswith("slot_"):
-        try:
-            slot_index = int(text.replace("slot_", "", 1))
-            selected_time = session["slots"][slot_index]
-        except (ValueError, IndexError, KeyError):
-            send_text(clinic, phone, "Invalid time selection. Reply Hi to start again.")
+    if step == "select_slot":
+        if text.startswith("slots_next_") or text.startswith("slots_prev_"):
+            try:
+                offset = int(text.split("_")[-1])
+                slots = session.get("slots", [])
+                send_list(clinic, phone, f"Select time for {session.get('date_display')}", [{"title": "Time slots", "rows": _slot_rows(slots, offset)}])
+            except (ValueError, IndexError):
+                send_text(clinic, phone, "Error navigating slots. Reply Hi to start again.")
             return
+
+        if text.startswith("slot_"):
+            try:
+                slot_index = int(text.replace("slot_", "", 1))
+                selected_time = session["slots"][slot_index]
+            except (ValueError, IndexError, KeyError):
+                send_text(clinic, phone, "Invalid time selection. Reply Hi to start again.")
+                return
 
         user_sessions[key] = {
             **session,

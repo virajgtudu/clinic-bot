@@ -4,32 +4,47 @@
 This project is a clinic management bot that integrates WhatsApp for user interactions, Flask for webhooks, and Streamlit for a management dashboard. It uses Google Sheets as a primary database for bookings and various reminder types.
 
 ## Architecture
-- **Backend:** Flask (`app.py`) handles incoming webhooks (`routes/webhook.py`).
+- **Backend:** Flask (`app.py`) handles incoming webhooks and hosts the integrated Background Scheduler for reminders.
+- **Timezone:** Standardized to **Asia/Kolkata (IST)** across all modules (`config.get_now()`).
 - **Dashboard:** Streamlit (`dashboard.py`) provides a UI for clinic administrators to manage bookings, doctors, and reminders.
+- **Queue Management:** 
+  - Tokens are generated sequentially **per-doctor and per-date**.
+  - Statuses: `Pending`, `Serving`, `Completed`, `Cancelled`.
+  - Live tracking via `status` command on WhatsApp.
+- **Database:** 
+  - Current: Google Sheets (Source of Truth).
+  - Planned: Supabase (PostgreSQL) for atomic token generation and scaling.
 - **Services:**
-  - `services/sheets.py`: Google Sheets integration. Uses `'` prefix for dates to force literal string storage.
+  - `services/sheets.py`: Google Sheets integration.
+  - `services/database.py`: (In-progress) Supabase integration.
   - `services/whatsapp.py`: WhatsApp messaging integration via Meta Graph API.
-  - `services/booking_logic.py`: Core logic for WhatsApp flows, patient identification, and multi-session doctor availability.
-  - `services/calendar.py`: Integration with Google Calendar for doctor-specific appointments and recurring availability blocks.
-- **Scheduler:** `scheduler.py` handles automated delivery for Medicine and Test reminders.
+  - `services/booking_logic.py`: Core logic for WhatsApp flows, patient identification, and per-doctor queue logic.
+  - `services/calendar.py`: Integration with Google Calendar for doctor-specific appointments.
+- **Scheduler:** Integrated into `app.py` via `APScheduler`. Handles automated delivery for Medicine (interactive buttons), Test, and Appointment reminders.
 
 ## Conventions
-- **Patient Identification:** Every patient is identified by a combination of **Name + Mobile Number + Age**.
-- **Date Standard:** The system-wide standard for dates is **`DD-MM-YYYY`**.
+- **Patient Identification:** Identified by **Name + Mobile Number + Age**.
+- **Date Standard:** System-wide standard is **`DD-MM-YYYY`**.
+- **Token Format:** `[Prefix]-[000]` (e.g., `VI-001`), unique per doctor/date.
 - **Google Sheets Database:**
   - `[clinic]_bookings`: Master appointment list.
-  - `[clinic]_medicines`: Medicine prescriptions and schedules.
+  - `[clinic]_medicines`: Medicine prescriptions (16 columns explicit, includes `Time 3`).
   - `[clinic]_test`: Medical test reminders.
-  - `[clinic]_followup`: Patient follow-up schedules.
-- **Doctor Availability:** Supports "Multi-Session" windows (e.g., split shifts) within a 24-hour range. Availability can be synced to personal Google Calendars as recurring events.
-- **Security:** Subscription status and fees are restricted to the `admin.py` panel only.
+- **Medicine Reminders:** Supports interactive buttons (Taken/Skip). Defaults to 24-hour format (09:00, 14:00, 21:00).
+
+## Deployment (Render)
+- **Environment Variables:**
+  - `CLINIC_CONFIG_DATA`: Full JSON content of `clinics.json`.
+  - `CLINIC_USERS_DATA`: Full JSON content of `users.json`.
+  - `GOOGLE_CREDENTIALS`: Full JSON content of service account credentials.
+  - `VERIFY_TOKEN`: Token for WhatsApp webhook verification.
+- **Start Command:** `python app.py` (or `gunicorn --workers 1 --bind 0.0.0.0:$PORT app:app`).
 
 ## Development Workflow
-- **Running Flask:** `python app.py`
+- **Running Backend + Reminders:** `python app.py`
 - **Running Dashboard:** `streamlit run dashboard.py`
-- **Running Reminders:** `python scheduler.py`
 
 ## Troubleshooting
-- **Date Column Issues:** If dates show "12:00:00 AM", ensure the sheet cell starts with a literal `'` (e.g., `'09-05-2026`). The `append_` functions in `sheets.py` handle this automatically.
-- **Calendar Not Syncing:** Check the `google_calendar_id` in the doctor's profile or clinic settings, and ensure `ENABLE_GOOGLE_CALENDAR=true` in `.env`.
-- **Reminder Loophole:** Patient-initiated reminders are locked to "Completed" booking sessions from the last 48 hours to prevent unauthorized use.
+- **Missing Reminders:** Check `Last Sent` column in Google Sheets. It tracks `DD-MM-YYYY@HH:MM` to prevent duplicates.
+- **Clinic Not Found:** Ensure `CLINIC_CONFIG_DATA` in Render environment matches the `phone_number_id` coming from Meta.
+- **JSON Parse Errors:** Code includes `_clean_json_env` to strip accidental quotes from environment variables.
