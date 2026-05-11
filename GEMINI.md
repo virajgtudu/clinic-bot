@@ -12,8 +12,8 @@ This project is a clinic management bot that integrates WhatsApp for user intera
   - Statuses: `Pending`, `Serving`, `Completed`, `Cancelled`.
   - Live tracking via `status` command on WhatsApp.
 - **Database:** 
-  - Current: Google Sheets (Source of Truth).
-  - Planned: Supabase (PostgreSQL) for atomic token generation and scaling.
+  - Current: Google Sheets (Source of Truth for data) + Local JSON/Env Vars (for config).
+  - Planned: Supabase (PostgreSQL) for atomic token generation and **Live Config persistence** (to avoid manual redeploys).
 - **Services:**
   - `services/sheets.py`: Google Sheets integration.
   - `services/database.py`: (In-progress) Supabase integration.
@@ -31,6 +31,7 @@ This project is a clinic management bot that integrates WhatsApp for user intera
   - `[clinic]_medicines`: Medicine prescriptions (16 columns explicit, includes `Time 3`).
   - `[clinic]_test`: Medical test reminders.
 - **Medicine Reminders:** Supports interactive buttons (Taken/Skip). Defaults to 24-hour format (09:00, 14:00, 21:00).
+- **Slot Pagination:** WhatsApp List Messages are limited to **10 rows**. The booking flow automatically paginates slots with "Next/Previous" buttons if a doctor has more than 10 available times.
 
 ## Deployment (Render)
 - **Environment Variables:**
