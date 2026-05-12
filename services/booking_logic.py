@@ -7,7 +7,7 @@ from pathlib import Path
 from services.calendar import create_calendar_event
 from services.sheets import MEDICINE_HEADERS, append_booking, append_medicine, append_test, append_followup, ensure_headers, open_sheet
 from services.whatsapp import send_buttons, send_list, send_text
-from services.database import create_appointment, get_queue_status, get_db
+from services.database import create_appointment, get_queue_status, get_db, get_doctors
 from config import get_now
 
 
@@ -71,16 +71,24 @@ def _doctor_rows(doctors):
 
 def _is_doctor_available_on(doctor, date_obj):
     """Check if the doctor is available on a specific day of the week."""
+    # 1. Check dynamic availability_json (Supabase)
+    avail_json = doctor.get("availability_json")
+    if avail_json:
+        day_name = date_obj.strftime("%A").lower() # e.g. "monday"
+        day_config = avail_json.get(day_name, {})
+        return day_config.get("enabled", False)
+
+    # 2. Fallback to static availability (clinics.json)
     availability = doctor.get("availability", {})
     if availability.get("mode") == "Manual Slots":
-        return True  # Assume always available for manual mode (original behavior)
+        return True  # Assume always available for manual mode
         
     allowed_days = availability.get("days", [])
     if not allowed_days:
         return True
         
-    day_name = date_obj.strftime("%a") # e.g. "Mon"
-    return day_name in allowed_days
+    day_name_short = date_obj.strftime("%a") # e.g. "Mon"
+    return day_name_short in allowed_days
 
 
 def _date_options(doctor, days=7):
@@ -922,10 +930,16 @@ def handle_message(clinic, message):
         return
 
     if text in {"new", "book"} and step in {"main_menu", "main"}:
-        doctors = clinic.get("doctors", [])
+        # Fetch dynamic doctors from Supabase
+        doctors = get_doctors(clinic_id)
+        if not doctors:
+            # Fallback to clinics.json
+            doctors = clinic.get("doctors", [])
+            
         if not doctors:
             send_text(clinic, phone, "No doctors are configured yet. Please contact the clinic.")
             return
+            
         user_sessions[key] = {
             "step": "select_doctor",
             "clinic_id": clinic_id,
@@ -1004,7 +1018,20 @@ def handle_message(clinic, message):
             return
 
         doctor = session.get("doctor", {})
-        slots = doctor.get("slots") or clinic.get("default_slots") or ["10:00 AM", "11:30 AM", "02:00 PM", "04:30 PM"]
+        # Extract slots based on dynamic availability_json or fallback to static slots
+        slots = []
+        avail = doctor.get("availability_json")
+        if avail:
+            # Map DD-MM-YYYY to weekday name
+            dt_obj = datetime.strptime(selected_date["value"], "%d-%m-%Y")
+            day_name = dt_obj.strftime("%A").lower()
+            day_config = avail.get(day_name, {})
+            if day_config.get("enabled"):
+                slots = day_config.get("slots", [])
+        
+        if not slots:
+            slots = doctor.get("slots") or clinic.get("default_slots") or ["10:00 AM", "11:30 AM", "02:00 PM", "04:30 PM"]
+
         user_sessions[key] = {
             "step": "select_slot",
             "clinic_id": clinic_id,

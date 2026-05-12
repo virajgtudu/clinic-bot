@@ -84,3 +84,18 @@ def update_appointment_status(appointment_id, status):
     except Exception as e:
         logger.error(f"Supabase update error: {e}")
         return False
+
+def get_doctors(clinic_id):
+    """Fetch all doctors for a specific clinic from the doctors table."""
+    db = get_db()
+    if not db:
+        return []
+    try:
+        response = db.table("doctors") \
+            .select("*") \
+            .eq("clinic_id", clinic_id) \
+            .execute()
+        return response.data
+    except Exception as e:
+        logger.error(f"Supabase fetch doctors error: {e}")
+        return []

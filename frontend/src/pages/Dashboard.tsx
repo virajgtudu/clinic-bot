@@ -28,6 +28,7 @@ import {
 import { cn } from '../lib/utils';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { useQueue } from '../hooks/useQueue';
+import { useDoctors, Doctor } from '../hooks/useDoctors';
 import { useWhatsAppStatus } from '../hooks/useWhatsAppStatus';
 import { useAuth } from '../components/AuthContext';
 import { WalkInModal } from '../components/WalkInModal';
@@ -57,6 +58,10 @@ export default function Dashboard() {
   const waitingQueue = queue.filter(p => p.status === 'waiting' || p.status === 'emergency');
   const servingPatient = queue.find(p => p.status === 'serving');
   const servingToken = servingPatient ? servingPatient.token : '---';
+
+  const avgWaitTime = queue.length > 0 
+    ? Math.round(queue.reduce((acc, p) => acc + p.wait_time_mins, 0) / queue.length)
+    : 0;
 
   const handleSignOut = async () => {
     if (confirm('Are you sure you want to sign out?')) {
@@ -187,7 +192,7 @@ export default function Dashboard() {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-10 space-y-10 custom-scrollbar">
-          {activeView === 'queue' ? (
+          {activeView === 'queue' && (
             <>
               {/* Top Metrics */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
@@ -205,8 +210,8 @@ export default function Dashboard() {
                 />
                 <MetricCard 
                   label="Avg. Wait Time" 
-                  value="18 min" 
-                  trend="Improved by 4m"
+                  value={`${avgWaitTime} min`} 
+                  trend="Updated live"
                   icon={<Clock className="text-brand-500" size={24} />}
                 />
                 <div className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col justify-center gap-4 group hover:shadow-xl hover:shadow-slate-200/50 dark:hover:shadow-none transition-all duration-300">
@@ -415,13 +420,17 @@ export default function Dashboard() {
                 </div>
               </div>
             </>
-          ) : (
+          )}
+
+          {activeView === 'settings' && <DoctorSettings />}
+
+          {!['queue', 'settings'].includes(activeView) && (
             <div className="flex flex-col items-center justify-center h-full text-center py-20">
                <div className="w-24 h-24 bg-brand-50 dark:bg-brand-950/30 text-brand-500 rounded-3xl flex items-center justify-center mb-8">
                   <Activity size={48} />
                </div>
                <h2 className="text-3xl font-black dark:text-white mb-4 uppercase tracking-tight">{activeView} module</h2>
-               <p className="text-slate-500 dark:text-slate-400 max-w-md font-medium">This module is part of the Professional package. Your clinic data is currently being indexed for this view.</p>
+               <p className="text-slate-500 dark:text-slate-400 max-w-md font-medium">This module is coming soon in the next update. We are currently building these analytics for you.</p>
                <button onClick={() => setActiveView('queue')} className="mt-10 px-8 py-4 bg-brand-500 text-white font-black rounded-2xl hover:bg-brand-600 transition-all shadow-lg shadow-brand-500/25">
                  Back to Queue
                </button>
@@ -437,6 +446,143 @@ export default function Dashboard() {
           await addWalkIn(name);
         }}
       />
+    </div>
+  );
+}
+
+function DoctorSettings() {
+  const { doctors, loading, addDoctor, updateDoctor, deleteDoctor } = useDoctors();
+  const [isAdding, setIsAdding] = useState(false);
+  const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null);
+  
+  const [name, setName] = useState('');
+  const [specialty, setSpecialty] = useState('');
+  const [slots, setSlots] = useState('09:00 AM, 10:00 AM, 11:00 AM, 12:00 PM, 03:00 PM, 04:00 PM');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const availability = {
+      monday: { enabled: true, slots: slots.split(',').map(s => s.trim()) },
+      tuesday: { enabled: true, slots: slots.split(',').map(s => s.trim()) },
+      wednesday: { enabled: true, slots: slots.split(',').map(s => s.trim()) },
+      thursday: { enabled: true, slots: slots.split(',').map(s => s.trim()) },
+      friday: { enabled: true, slots: slots.split(',').map(s => s.trim()) },
+      saturday: { enabled: true, slots: slots.split(',').map(s => s.trim()) },
+    };
+
+    if (editingDoctor) {
+      await updateDoctor(editingDoctor.id, { name, specialty, availability_json: availability });
+      setEditingDoctor(null);
+    } else {
+      await addDoctor({ name, specialty, availability_json: availability });
+      setIsAdding(false);
+    }
+    setName('');
+    setSpecialty('');
+  };
+
+  const startEdit = (doc: Doctor) => {
+    setEditingDoctor(doc);
+    setName(doc.name);
+    setSpecialty(doc.specialty || '');
+    const firstDay = Object.values(doc.availability_json || {})[0] as any;
+    setSlots(firstDay?.slots?.join(', ') || '');
+    setIsAdding(true);
+  };
+
+  return (
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-black dark:text-white tracking-tight">Doctor Management</h2>
+          <p className="text-slate-500 dark:text-slate-400 font-medium mt-1">Configure your clinic's medical staff and their session timings</p>
+        </div>
+        {!isAdding && (
+          <button 
+            onClick={() => { setIsAdding(true); setEditingDoctor(null); setName(''); setSpecialty(''); }}
+            className="px-6 py-3 bg-brand-500 text-white font-black rounded-2xl hover:bg-brand-600 transition-all shadow-lg shadow-brand-500/25 flex items-center gap-2"
+          >
+            <UserPlus size={18} /> Add New Doctor
+          </button>
+        )}
+      </div>
+
+      {isAdding && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white dark:bg-slate-900 p-10 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-xl">
+          <form onSubmit={handleSubmit} className="space-y-8">
+            <div className="grid grid-cols-2 gap-8">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Doctor Full Name</label>
+                <input 
+                  type="text" value={name} onChange={e => setName(e.target.value)} required
+                  placeholder="e.g. Dr. Prabhat Jain"
+                  className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-transparent focus:border-brand-500/30 focus:bg-white dark:focus:bg-slate-900 rounded-2xl text-sm font-bold transition-all outline-none dark:text-white"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Specialty</label>
+                <input 
+                  type="text" value={specialty} onChange={e => setSpecialty(e.target.value)}
+                  placeholder="e.g. Cardiologist"
+                  className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-transparent focus:border-brand-500/30 focus:bg-white dark:focus:bg-slate-900 rounded-2xl text-sm font-bold transition-all outline-none dark:text-white"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Availability Slots (Comma separated)</label>
+              <textarea 
+                rows={3} value={slots} onChange={e => setSlots(e.target.value)} required
+                className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-transparent focus:border-brand-500/30 focus:bg-white dark:focus:bg-slate-900 rounded-2xl text-sm font-bold transition-all outline-none dark:text-white"
+              />
+              <p className="text-[10px] text-slate-400 font-bold ml-1">Format: 09:00 AM, 09:30 AM, 10:00 AM...</p>
+            </div>
+            <div className="flex gap-4 pt-4">
+              <button type="submit" className="flex-1 py-4 bg-brand-500 text-white font-black rounded-2xl hover:bg-brand-600 transition-all shadow-lg shadow-brand-500/25">
+                {editingDoctor ? 'Update Doctor' : 'Save Doctor'}
+              </button>
+              <button type="button" onClick={() => setIsAdding(false)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-black rounded-2xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-all">
+                Cancel
+              </button>
+            </div>
+          </form>
+        </motion.div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {loading ? (
+          <div className="col-span-full py-20 text-center"><Loader2 className="animate-spin text-brand-500 mx-auto" size={32} /></div>
+        ) : doctors.length === 0 ? (
+          <div className="col-span-full bg-white dark:bg-slate-900 p-20 rounded-[2.5rem] text-center border border-dashed border-slate-200 dark:border-slate-800">
+            <p className="text-slate-400 font-bold">No doctors added yet. Start by adding your first doctor.</p>
+          </div>
+        ) : (
+          doctors.map(doc => (
+            <div key={doc.id} className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm group hover:shadow-xl transition-all duration-500">
+              <div className="flex justify-between items-start mb-6">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-50 to-brand-100 dark:from-brand-900/20 dark:to-brand-900/10 flex items-center justify-center text-brand-500">
+                  <Stethoscope size={32} />
+                </div>
+                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => startEdit(doc)} className="p-2 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-brand-500 rounded-lg transition-colors"><Settings size={16} /></button>
+                  <button onClick={() => { if(confirm('Delete this doctor?')) deleteDoctor(doc.id); }} className="p-2 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-rose-500 rounded-lg transition-colors"><AlertCircle size={16} /></button>
+                </div>
+              </div>
+              <h4 className="text-xl font-black dark:text-white">{doc.name}</h4>
+              <p className="text-xs font-bold text-brand-500 uppercase tracking-widest mt-1">{doc.specialty || 'General Physician'}</p>
+              
+              <div className="mt-8 pt-8 border-t border-slate-50 dark:border-slate-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Clock size={14} className="text-slate-400" />
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Slots</span>
+                </div>
+                <span className="px-3 py-1 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 text-[10px] font-black rounded-full">
+                  {Object.values(doc.availability_json || {})[0]?.slots?.length || 0} Slots
+                </span>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }
