@@ -19,8 +19,12 @@ export function useQueue() {
   const [loading, setLoading] = useState(true);
 
   const fetchQueue = async () => {
-    if (!profile?.clinic_id) return;
+    if (!profile?.clinic_id) {
+      console.warn('useQueue: No clinic_id found in profile. Ensure you have linked your user to a clinic.');
+      return;
+    }
 
+    console.log('useQueue: Fetching for clinic_id:', profile.clinic_id);
     const today = new Date().toISOString().split('T')[0];
     
     const { data, error } = await supabase

@@ -43,7 +43,7 @@ export default function LoginPage() {
             <div className="w-12 h-12 bg-brand-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-brand-500/20 group-hover:scale-110 transition-transform">
               <Stethoscope size={28} strokeWidth={2.5} />
             </div>
-            <span className="text-3xl font-black tracking-tight dark:text-white">ClinOS</span>
+            <span className="text-3xl font-black tracking-tight dark:text-white">ClinicPRO</span>
           </Link>
           <h2 className="text-2xl font-black dark:text-white">Welcome back</h2>
           <p className="text-slate-500 dark:text-slate-400 font-medium mt-2">Enter your credentials to access your clinic</p>

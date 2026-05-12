@@ -56,10 +56,10 @@ export default function SignupPage() {
             <div className="w-12 h-12 bg-brand-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-brand-500/20 group-hover:scale-110 transition-transform">
               <Stethoscope size={28} strokeWidth={2.5} />
             </div>
-            <span className="text-3xl font-black tracking-tight dark:text-white">ClinOS</span>
+            <span className="text-3xl font-black tracking-tight dark:text-white">ClinicPRO</span>
           </Link>
           <h2 className="text-2xl font-black dark:text-white">Start your free trial</h2>
-          <p className="text-slate-500 dark:text-slate-400 font-medium mt-2">Join 500+ clinics using ClinOS today</p>
+          <p className="text-slate-500 dark:text-slate-400 font-medium mt-2">Join 500+ clinics using ClinicPRO today</p>
         </div>
 
         <div className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-200/60 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-none">

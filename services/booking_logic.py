@@ -842,9 +842,14 @@ def _get_queue_status_info(clinic, phone):
         ahead = max(0, patient_idx - serving_idx - 1)
         
         # Format serving token to [Prefix]-[000] if it's an integer
-        clean_name = re.sub(r'^Dr\.?\s+', '', doctor_id, flags=re.IGNORECASE)
-        prefix = "".join([c for c in clean_name if c.isalnum()])[:2].upper()
-        if not prefix: prefix = "TK"
+        clean_name = re.sub(r'^Dr\.?\s+', '', doctor_id, flags=re.IGNORECASE).strip()
+        name_parts = clean_name.split()
+        if len(name_parts) >= 2:
+            prefix = (name_parts[0][0] + name_parts[-1][0]).upper()
+        elif len(name_parts) == 1:
+            prefix = name_parts[0][:2].upper()
+        else:
+            prefix = "TK"
         
         def format_tk(tk):
             if isinstance(tk, int):
@@ -1088,10 +1093,16 @@ def handle_message(clinic, message):
                 raise Exception("Supabase failed to generate token")
                 
             # Format token for display and Sheet: [Prefix]-[000]
-            # Skip "Dr." or "Dr " to avoid all doctors having "DR" prefix
-            clean_name = re.sub(r'^Dr\.?\s+', '', doctor.get("name", "TK"), flags=re.IGNORECASE)
-            prefix = "".join([c for c in clean_name if c.isalnum()])[:2].upper()
-            if not prefix: prefix = "TK"
+            # Skip "Dr." and use initials of first and last name (e.g. Prabhat Jain -> PJ)
+            clean_name = re.sub(r'^Dr\.?\s+', '', doctor.get("name", "TK"), flags=re.IGNORECASE).strip()
+            name_parts = clean_name.split()
+            if len(name_parts) >= 2:
+                prefix = (name_parts[0][0] + name_parts[-1][0]).upper()
+            elif len(name_parts) == 1:
+                prefix = name_parts[0][:2].upper()
+            else:
+                prefix = "TK"
+            
             token = f"{prefix}-{token_num:03d}"
             
         except Exception as sb_err:

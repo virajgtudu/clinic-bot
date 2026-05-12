@@ -79,7 +79,7 @@ export default function Dashboard() {
             <div className="w-10 h-10 bg-gradient-to-br from-brand-500 to-brand-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-brand-500/20 group-hover:scale-110 transition-transform duration-300">
               <Stethoscope size={22} strokeWidth={2.5} />
             </div>
-            <span className="text-2xl font-black tracking-tight dark:text-white bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-600 dark:from-white dark:to-slate-400">ClinOS</span>
+            <span className="text-2xl font-black tracking-tight dark:text-white bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-600 dark:from-white dark:to-slate-400">ClinicPRO</span>
           </div>
           
           <nav className="space-y-1.5">
@@ -481,7 +481,7 @@ function MetricCard({ label, value, trend, highlight = false, icon }: { label: s
           {icon}
         </div>
       </div>
-      <p className="text-4xl font-black tracking-tight mb-2 relative z-10">{value}</p>
+      <p className="text-4xl font-black tracking-tight mb-2 relative z-10 dark:text-white">{value}</p>
       {trend && (
         <div className="flex items-center gap-1.5 relative z-10">
           <div className={cn("px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider", highlight ? "bg-white/10 text-brand-100" : "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400")}>

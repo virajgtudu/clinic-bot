@@ -36,7 +36,7 @@ export default function LandingPage() {
             <div className="w-10 h-10 bg-gradient-to-br from-brand-500 to-brand-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-brand-500/20 group-hover:scale-110 transition-transform">
               <Stethoscope size={22} strokeWidth={2.5} />
             </div>
-            <span className="text-2xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-600 dark:from-white dark:to-slate-400">ClinOS</span>
+            <span className="text-2xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-600 dark:from-white dark:to-slate-400">ClinicPRO</span>
           </Link>
           
           <div className="hidden lg:flex items-center gap-10">
@@ -214,7 +214,7 @@ export default function LandingPage() {
         </div>
         <div className="max-w-7xl mx-auto px-8 relative">
           <div className="text-center max-w-2xl mx-auto mb-20">
-            <h2 className="text-5xl font-black mb-6 tracking-tight dark:text-white leading-tight">Scale your practice with ClinOS.</h2>
+            <h2 className="text-5xl font-black mb-6 tracking-tight dark:text-white leading-tight">Scale your practice with ClinicPRO.</h2>
             <p className="text-lg text-slate-500 dark:text-slate-400 font-medium">Simple, transparent pricing that grows with you.</p>
           </div>
           <div className="grid md:grid-cols-3 gap-10 max-w-6xl mx-auto items-center">
@@ -234,7 +234,7 @@ export default function LandingPage() {
                 <div className="w-10 h-10 bg-gradient-to-br from-brand-500 to-brand-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-brand-500/20 group-hover:rotate-12 transition-transform">
                   <Stethoscope size={22} strokeWidth={2.5} />
                 </div>
-                <span className="text-2xl font-black tracking-tighter dark:text-white">ClinOS</span>
+                <span className="text-2xl font-black tracking-tighter dark:text-white">ClinicPRO</span>
               </div>
               <p className="text-lg text-slate-500 dark:text-slate-400 max-w-sm font-medium leading-relaxed">The operating system for modern clinics. Built for efficiency, designed for patients.</p>
               <div className="mt-8 flex gap-4">
@@ -263,7 +263,7 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="pt-10 border-t border-slate-100 dark:border-slate-900 flex flex-col md:row items-center justify-between gap-6 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-            <p>© 2026 ClinOS Technologies. All rights reserved.</p>
+            <p>© 2026 ClinicPRO Technologies. All rights reserved.</p>
             <div className="flex gap-8">
               <span>System Status: <span className="text-emerald-500">Normal</span></span>
               <span>Uptime: 99.9%</span>
