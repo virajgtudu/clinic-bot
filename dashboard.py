@@ -7,6 +7,7 @@ import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 from dotenv import load_dotenv
+from services.database import get_db, update_appointment_status
 
 logger = logging.getLogger(__name__)
 
@@ -213,16 +214,59 @@ def update_booking_status_in_sheet(clinic, token, new_status):
     rows = sheet.get_all_records()
     status_col = BOOKING_HEADERS.index("Status") + 1
     token_col = BOOKING_HEADERS.index("Token") + 1
+    
+    # 1. Update in Sheet
+    target_row = None
     for row_index, row in enumerate(rows, start=2):
         if str(row.get("Token", "")).strip() == str(token).strip():
             sheet.update_cell(row_index, status_col, new_status)
-            return True, None
-    # fallback for non-standard headers
-    cell = sheet.find(str(token), in_column=token_col)
-    if cell:
-        sheet.update_cell(cell.row, status_col, new_status)
-        return True, None
-    return False, "Token not found"
+            target_row = row
+            break
+            
+    if not target_row:
+        # fallback for non-standard headers
+        cell = sheet.find(str(token), in_column=token_col)
+        if cell:
+            sheet.update_cell(cell.row, status_col, new_status)
+            # Try to get row data if possible, but finding a single cell doesn't give us the whole row easily here
+            # For now, if fallback is used, we might miss the Supabase sync or have less info
+            pass
+        else:
+            return False, "Token not found"
+
+    # 2. Update in Supabase
+    try:
+        db = get_db()
+        if db and target_row:
+            doctor_id = target_row.get("Doctor")
+            date_val = target_row.get("Date") # DD-MM-YYYY
+            
+            # Extract numeric token part from "VI-001"
+            tk_str = str(token)
+            if "-" in tk_str:
+                tk_num = int(tk_str.split("-")[-1])
+            else:
+                tk_num = int(re.sub(r"\D", "", tk_str))
+                
+            db_date = datetime.strptime(str(date_val), "%d-%m-%Y").strftime("%Y-%m-%d")
+            
+            # Find the record ID
+            response = db.table("appointments") \
+                .select("id") \
+                .eq("clinic_id", clinic["phone_number_id"]) \
+                .eq("doctor_id", doctor_id) \
+                .eq("booking_date", db_date) \
+                .eq("token", tk_num) \
+                .execute()
+                
+            if response.data:
+                appt_id = response.data[0]["id"]
+                update_appointment_status(appt_id, new_status)
+    except Exception as e:
+        logger.error(f"Failed to sync status to Supabase: {e}")
+        # We don't fail the whole operation if Supabase sync fails, but we log it.
+
+    return True, None
 
 
 def load_clinic_data(clinic, demo_mode=False):

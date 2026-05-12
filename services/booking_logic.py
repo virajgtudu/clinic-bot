@@ -7,6 +7,7 @@ from pathlib import Path
 from services.calendar import create_calendar_event
 from services.sheets import MEDICINE_HEADERS, append_booking, append_medicine, append_test, append_followup, ensure_headers, open_sheet
 from services.whatsapp import send_buttons, send_list, send_text
+from services.database import create_appointment, get_queue_status, get_db
 from config import get_now
 
 
@@ -785,64 +786,76 @@ def _parse_booking_datetimes(date_value, selected_time):
 
 
 def _get_queue_status_info(clinic, phone):
-    """Calculate queue position and now-serving info from GSheet"""
+    """Calculate queue position and now-serving info from Supabase"""
     try:
-        sheet = open_sheet(clinic.get("sheet_name"), clinic.get("sheet_id"))
-        records = sheet.get_all_records()
         now = get_now()
-        today = now.strftime("%d-%m-%Y")
+        today = now.strftime("%Y-%m-%d")
         normalized_phone = _normalize_phone(phone)
+        clinic_id = clinic["phone_number_id"]
         
-        # Find patient's active booking for today
-        patient_booking = None
-        for r in reversed(records):
-            if str(r.get("Date")) == today and _normalize_phone(r.get("Phone")) == normalized_phone:
-                if r.get("Status") not in ["Cancelled", "Completed"]:
-                    patient_booking = r
-                    break
-        
-        if not patient_booking:
+        # 1. Find patient's active booking for today in Supabase
+        db = get_db()
+        if not db:
+            return "Database connection error. Please try again later."
+            
+        response = db.table("appointments") \
+            .select("*") \
+            .eq("clinic_id", clinic_id) \
+            .eq("phone", normalized_phone) \
+            .eq("booking_date", today) \
+            .neq("status", "Cancelled") \
+            .order("created_at", desc=True) \
+            .limit(1) \
+            .execute()
+            
+        if not response.data:
             return "No active appointments found for today."
             
-        doctor = patient_booking.get("Doctor")
-        patient_token = patient_booking.get("Token")
+        patient_booking = response.data[0]
+        doctor_id = patient_booking["doctor_id"]
+        patient_token = patient_booking["token"]
         
-        # Filter all bookings for this doctor today
-        today_queue = []
-        for r in records:
-            if str(r.get("Date")) == today and r.get("Doctor") == doctor:
-                today_queue.append(r)
+        # 2. Fetch full queue for this doctor today
+        queue = get_queue_status(clinic_id, doctor_id, today)
         
-        # Find currently serving
+        if not queue:
+            return "Error retrieving queue details."
+            
+        # 3. Calculate position
         serving_token = "Not started"
         serving_idx = -1
-        
-        # Sort queue by Booked At or Token if possible (assuming sequential entry)
-        # For simplicity, we use the order in sheet
-        for idx, r in enumerate(today_queue):
-            if r.get("Status") == "Serving":
-                serving_token = r.get("Token")
-                serving_idx = idx
-            elif r.get("Status") == "Completed":
-                serving_idx = idx
-        
-        # Find patient position
         patient_idx = -1
-        for idx, r in enumerate(today_queue):
-            if r.get("Token") == patient_token:
+        
+        for idx, appt in enumerate(queue):
+            if appt["status"] == "Serving":
+                serving_token = appt["token"]
+                serving_idx = idx
+            elif appt["status"] == "Completed":
+                serving_idx = idx
+                
+            if appt["token"] == patient_token:
                 patient_idx = idx
-                break
         
         if patient_idx == -1:
             return f"Your appointment (Token: {patient_token}) was not found in the active queue."
             
         ahead = max(0, patient_idx - serving_idx - 1)
         
+        # Format serving token to [Prefix]-[000] if it's an integer
+        clean_name = re.sub(r'^Dr\.?\s+', '', doctor_id, flags=re.IGNORECASE)
+        prefix = "".join([c for c in clean_name if c.isalnum()])[:2].upper()
+        if not prefix: prefix = "TK"
+        
+        def format_tk(tk):
+            if isinstance(tk, int):
+                return f"{prefix}-{tk:03d}"
+            return tk
+
         status_msg = (
-            f"🏥 *{clinic.get('name')} Queue*\n\n"
-            f"Doctor: {doctor}\n"
-            f"Your Token: *{patient_token}*\n"
-            f"Now Serving: *{serving_token}*\n"
+            f"🏥 *{_clinic_name(clinic)} Queue*\n\n"
+            f"Doctor: {doctor_id}\n"
+            f"Your Token: *{format_tk(patient_token)}*\n"
+            f"Now Serving: *{format_tk(serving_token)}*\n"
             f"Patients Ahead: {ahead}\n\n"
             f"⏳ Estimated wait: {ahead * 15} mins"
         )
@@ -1056,12 +1069,41 @@ def handle_message(clinic, message):
 
     if step == "confirm" and text == "confirm":
         doctor = session.get("doctor", {})
-        date_val = session.get("date_value")
-        token = get_next_token_from_sheet(clinic, date_val, doctor.get("name"))
+        date_val = session.get("date_value") # DD-MM-YYYY
+        
+        # 1. Save to Supabase and get Token
+        try:
+            db_date = datetime.strptime(date_val, "%d-%m-%Y").strftime("%Y-%m-%d")
+            sb_data = {
+                "clinic_id": clinic_id,
+                "doctor_id": doctor.get("name"),
+                "name": session.get("name"),
+                "phone": _normalize_phone(phone),
+                "booking_date": db_date,
+                "time": session.get("selected_time"),
+                "source": "whatsapp"
+            }
+            token_num = create_appointment(sb_data)
+            if not token_num:
+                raise Exception("Supabase failed to generate token")
+                
+            # Format token for display and Sheet: [Prefix]-[000]
+            # Skip "Dr." or "Dr " to avoid all doctors having "DR" prefix
+            clean_name = re.sub(r'^Dr\.?\s+', '', doctor.get("name", "TK"), flags=re.IGNORECASE)
+            prefix = "".join([c for c in clean_name if c.isalnum()])[:2].upper()
+            if not prefix: prefix = "TK"
+            token = f"{prefix}-{token_num:03d}"
+            
+        except Exception as sb_err:
+            logger.error(f"Supabase booking failed: {sb_err}")
+            # Fallback to sheet-based token if Supabase is down
+            token = get_next_token_from_sheet(clinic, date_val, doctor.get("name"))
+
         now = get_now()
         booked_at = now.strftime("%d-%m-%Y %H:%M")
         full_name = f"{session.get('name')} ({session.get('age')})"
 
+        # 2. Save to Google Sheets (Redundant / Master Record)
         try:
             append_booking(
                 clinic,
@@ -1079,8 +1121,10 @@ def handle_message(clinic, message):
             )
         except Exception as exc:
             logger.exception("Sheet save failed for clinic %s: %s", clinic_id, exc)
-            send_text(clinic, phone, "Sorry, I could not save this booking right now. Please try again later.")
-            return
+            # If Supabase worked, we proceed even if sheet fails, as Supabase is now source of truth for queue
+            if not token_num:
+                send_text(clinic, phone, "Sorry, I could not save this booking right now. Please try again later.")
+                return
 
         try:
             start_datetime, end_datetime = _parse_booking_datetimes(date_val, session.get("selected_time"))

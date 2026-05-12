@@ -29,25 +29,16 @@ AS $$
 DECLARE
   new_token INTEGER;
 BEGIN
-  -- Lock rows for this clinic + doctor + date to prevent race conditions
-  -- We use a table-level lock or a specific row lock if we had a daily_counts table.
-  -- For now, we lock based on existing matching rows.
-  SELECT COALESCE(MAX(token), 0) + 1
-  INTO new_token
-  FROM appointments
-  WHERE clinic_id = p_clinic_id
-    AND doctor_id = p_doctor_id
-    AND booking_date = p_date
-  FOR UPDATE;
-
+  -- Generate new token by incrementing the max existing token for this doctor/date
   INSERT INTO appointments (
     clinic_id, doctor_id, patient_name, phone,
     booking_date, booking_time, source, token
   )
-  VALUES (
+  SELECT 
     p_clinic_id, p_doctor_id, p_name, p_phone,
-    p_date, p_time, p_source, new_token
-  );
+    p_date, p_time, p_source,
+    COALESCE((SELECT MAX(token) FROM appointments WHERE clinic_id = p_clinic_id AND doctor_id = p_doctor_id AND booking_date = p_date), 0) + 1
+  RETURNING token INTO new_token;
 
   RETURN new_token;
 END;
