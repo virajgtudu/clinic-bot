@@ -17,7 +17,10 @@ export function useDoctors() {
   const [loading, setLoading] = useState(true);
 
   const fetchDoctors = async () => {
-    if (!profile?.clinic_id) return;
+    if (!profile?.clinic_id) {
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
     const { data, error } = await supabase

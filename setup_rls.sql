@@ -37,19 +37,51 @@ WITH CHECK (
 );
 
 -- 5. Policies for 'clinics' table
-CREATE POLICY "Clinic staff can view their own clinic info" 
-ON clinics
-FOR SELECT 
-TO authenticated
+DROP POLICY IF EXISTS "Clinic staff can view their own clinic info" ON clinics;
+DROP POLICY IF EXISTS "Authenticated users can view clinics" ON clinics;
+DROP POLICY IF EXISTS "Authenticated users can create clinics" ON clinics;
+DROP POLICY IF EXISTS "Allow clinic claiming" ON clinics;
+DROP POLICY IF EXISTS "Clinic staff can update their own clinic info" ON clinics;
+
+-- Allow all authenticated users to see clinic names/IDs
+CREATE POLICY "Enable read access for authenticated users" 
+ON clinics FOR SELECT 
+TO authenticated 
+USING (true);
+
+-- Allow all authenticated users to insert new clinics
+CREATE POLICY "Enable insert access for authenticated users" 
+ON clinics FOR INSERT 
+TO authenticated 
+WITH CHECK (true);
+
+-- Allow users to update a clinic if they are linked to it OR if it's not linked to anyone
+CREATE POLICY "Enable update access for clinic admins" 
+ON clinics FOR UPDATE 
+TO authenticated 
 USING (
-  id IN (
-    SELECT clinic_id FROM profiles WHERE id = auth.uid()
-  )
+  id IN (SELECT clinic_id FROM profiles WHERE id = auth.uid())
+  OR 
+  id NOT IN (SELECT clinic_id FROM profiles WHERE clinic_id IS NOT NULL)
 );
 
 -- 6. Policies for 'profiles' table
-CREATE POLICY "Users can view their own profile" 
-ON profiles
-FOR SELECT 
-TO authenticated
-USING (id = auth.uid());
+DROP POLICY IF EXISTS "Users can view their own profile" ON profiles;
+DROP POLICY IF EXISTS "Users can update their own profile" ON profiles;
+
+CREATE POLICY "Enable read for own profile" 
+ON profiles FOR SELECT 
+TO authenticated 
+USING (auth.uid() = id);
+
+CREATE POLICY "Enable update for own profile" 
+ON profiles FOR UPDATE 
+TO authenticated 
+USING (auth.uid() = id)
+WITH CHECK (auth.uid() = id);
+
+-- Allow insertion of profile (though trigger usually handles this)
+CREATE POLICY "Enable insert for own profile" 
+ON profiles FOR INSERT 
+TO authenticated 
+WITH CHECK (auth.uid() = id);

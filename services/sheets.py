@@ -12,7 +12,7 @@ from gspread.exceptions import SpreadsheetNotFound
 from google.oauth2.service_account import Credentials
 
 
-BOOKING_HEADERS = ["#", "Name", "Phone", "Date", "Time", "Doctor", "Specialty", "Token", "Status", "Booked At"]
+BOOKING_HEADERS = ["#", "Name", "Phone", "Date", "Time", "Doctor", "Specialty", "Token", "Status", "Booked At", "Patient ID"]
 MEDICINE_HEADERS = [
     "#",
     "Phone",

@@ -20,27 +20,30 @@ def get_db():
 
 def create_appointment(data):
     """
-    Call the Postgres function 'create_appointment' to handle atomic token generation.
+    Call the Postgres function 'create_appointment' to handle atomic token generation and patient matching.
     data = {
         "clinic_id": str,
         "doctor_id": str,
         "name": str,
         "phone": str,
+        "age": int,
         "booking_date": "YYYY-MM-DD",
         "time": str,
         "source": "whatsapp" | "walkin" | "call"
     }
+    Returns: { "appointment_id": uuid, "token": int, "patient_id": "PID-XXXX" }
     """
     db = get_db()
     if not db:
         return None
-        
+
     try:
         response = db.rpc("create_appointment", {
             "p_clinic_id": data["clinic_id"],
             "p_doctor_id": data["doctor_id"],
             "p_name": data["name"],
             "p_phone": data["phone"],
+            "p_age": int(data.get("age", 0)),
             "p_date": data["booking_date"],
             "p_time": data["time"],
             "p_source": data["source"]
@@ -49,7 +52,6 @@ def create_appointment(data):
     except Exception as e:
         logger.error(f"Supabase RPC error: {e}")
         return None
-
 def get_queue_status(clinic_id, doctor_id, date):
     """Get all appointments for a doctor on a specific date, ordered by token."""
     db = get_db()

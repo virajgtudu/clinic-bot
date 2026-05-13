@@ -1,6 +1,6 @@
 import os
-
-from flask import Blueprint, current_app, request
+import re
+from flask import Blueprint, current_app, request, jsonify
 
 from config import get_clinic_by_phone_id, load_config
 from services.booking_logic import handle_message
@@ -15,6 +15,91 @@ def _valid_verify_token(token):
         return True
 
     return any(token == clinic.get("webhook_verify_token") for clinic in load_config().values())
+
+
+@webhook_bp.route("/webhook/notify-next", methods=["POST"])
+def notify_next():
+    """Endpoint triggered by Supabase trigger to notify the next patient."""
+    data = request.get_json(silent=True) or {}
+    phone = data.get("phone")
+    patient_name = data.get("patient_name")
+    doctor_id = data.get("doctor_id")
+    token = data.get("token")
+    clinic_id = data.get("clinic_id")
+
+    if not all([phone, patient_name, doctor_id, clinic_id]):
+        return jsonify({"error": "Missing parameters"}), 400
+
+    clinic = get_clinic_by_phone_id(clinic_id)
+    if not clinic:
+        return jsonify({"error": "Clinic not found"}), 404
+
+    # Format token nicely: [Prefix]-[000]
+    clean_name = re.sub(r'^Dr\.?\s+', '', doctor_id, flags=re.IGNORECASE).strip()
+    name_parts = clean_name.split()
+    if len(name_parts) >= 2:
+        prefix = (name_parts[0][0] + name_parts[-1][0]).upper()
+    elif len(name_parts) == 1:
+        prefix = name_parts[0][:2].upper()
+    else:
+        prefix = "TK"
+    
+    formatted_token = f"{prefix}-{int(token):03d}" if str(token).isdigit() else token
+
+    message = (
+        f"🔔 *Queue Update*\n\n"
+        f"Hi {patient_name}, {doctor_id} is ready. "
+        f"You are *next* in queue (Token: {formatted_token}).\n\n"
+        f"Please be ready and proceed to the consultation room soon!"
+    )
+
+    try:
+        from services.whatsapp import send_text
+        send_text(clinic, phone, message)
+        return jsonify({"status": "sent"}), 200
+    except Exception as e:
+        current_app.logger.error(f"Failed to send next-patient notification: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@webhook_bp.route("/webhook/confirm-walkin", methods=["POST"])
+def confirm_walkin():
+    """Endpoint triggered by Supabase trigger to confirm walk-in bookings."""
+    data = request.get_json(silent=True) or {}
+    phone = data.get("phone")
+    patient_name = data.get("patient_name")
+    doctor_id = data.get("doctor_id")
+    token = data.get("token")
+    clinic_id = data.get("clinic_id")
+
+    if not all([phone, patient_name, doctor_id, clinic_id]) or phone == 'walk-in':
+        return jsonify({"status": "skipped"}), 200
+
+    clinic = get_clinic_by_phone_id(clinic_id)
+    if not clinic:
+        return jsonify({"error": "Clinic not found"}), 404
+
+    # Format token
+    clean_name = re.sub(r'^Dr\.?\s+', '', doctor_id, flags=re.IGNORECASE).strip()
+    name_parts = clean_name.split()
+    prefix = (name_parts[0][0] + name_parts[-1][0]).upper() if len(name_parts) >= 2 else doctor_id[:2].upper()
+    formatted_token = f"{prefix}-{int(token):03d}" if str(token).isdigit() else token
+
+    message = (
+        f"✅ *Booking Confirmed!*\n\n"
+        f"Hi {patient_name}, your walk-in appointment has been added to the queue.\n\n"
+        f"👨‍⚕️ *Doctor:* {doctor_id}\n"
+        f"🎫 *Token:* {formatted_token}\n\n"
+        f"You can track your live queue status by replying *status* anytime."
+    )
+
+    try:
+        from services.whatsapp import send_text
+        send_text(clinic, phone, message)
+        return jsonify({"status": "sent"}), 200
+    except Exception as e:
+        current_app.logger.error(f"Failed to send walk-in confirmation: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 @webhook_bp.route("/webhook", methods=["GET"])

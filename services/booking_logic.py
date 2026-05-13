@@ -1111,13 +1111,17 @@ def handle_message(clinic, message):
                 "doctor_id": doctor.get("name"),
                 "name": session.get("name"),
                 "phone": _normalize_phone(phone),
+                "age": session.get("age"),
                 "booking_date": db_date,
                 "time": session.get("selected_time"),
                 "source": "whatsapp"
             }
-            token_num = create_appointment(sb_data)
-            if not token_num:
+            sb_res = create_appointment(sb_data)
+            if not sb_res or not sb_res.get('token'):
                 raise Exception("Supabase failed to generate token")
+            
+            token_num = sb_res.get('token')
+            patient_id = sb_res.get('patient_id')
                 
             # Format token for display and Sheet: [Prefix]-[000]
             # Skip "Dr." and use initials of first and last name (e.g. Prabhat Jain -> PJ)
@@ -1136,6 +1140,7 @@ def handle_message(clinic, message):
             logger.error(f"Supabase booking failed: {sb_err}")
             # Fallback to sheet-based token if Supabase is down
             token = get_next_token_from_sheet(clinic, date_val, doctor.get("name"))
+            patient_id = "N/A"
 
         now = get_now()
         booked_at = now.strftime("%d-%m-%Y %H:%M")
@@ -1155,6 +1160,7 @@ def handle_message(clinic, message):
                     token,
                     "Pending",
                     booked_at,
+                    patient_id
                 ],
             )
         except Exception as exc:

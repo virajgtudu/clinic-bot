@@ -1,51 +1,49 @@
-# Clinic Bot Project
+# ClinicPRO Project
 
 ## Overview
-This project is a clinic management bot that integrates WhatsApp for user interactions, Flask for webhooks, and Streamlit for a management dashboard. It uses Google Sheets as a primary database for bookings and various reminder types.
+ClinicPRO is a professional, multi-tenant clinic management platform. It integrates WhatsApp for patient interactions (booking, reminders, status tracking), Supabase for real-time queue management and multi-clinic security, and a modern React dashboard for clinic administrators.
 
 ## Architecture
-- **Backend:** Flask (`app.py`) handles incoming webhooks and hosts the integrated Background Scheduler for reminders.
+- **Backend:** Flask (`app.py`) handles WhatsApp webhooks via Meta Graph API and hosts the integrated Background Scheduler.
+- **Frontend:** React + Vite + TypeScript (`frontend/`) provides a high-fidelity dashboard for real-time queue monitoring, doctor management, and analytics.
+- **Primary Database:** Supabase (PostgreSQL) handles:
+    - **Real-time Queue:** `appointments` table with Postgres Changes subscription.
+    - **Atomic Token Generation:** `create_appointment` RPC function.
+    - **Multi-Tenant Security:** Row Level Security (RLS) and Supabase Auth.
+    - **Dynamic Configuration:** `doctors` table for per-clinic staff and slot management.
+- **Secondary Database:** Google Sheets acts as a master record for bookings and reminders, providing redundant storage and easy manual export.
 - **Timezone:** Standardized to **Asia/Kolkata (IST)** across all modules (`config.get_now()`).
-- **Dashboard:** Streamlit (`dashboard.py`) provides a UI for clinic administrators to manage bookings, doctors, and reminders.
-- **Queue Management:** 
-  - Tokens are generated sequentially **per-doctor and per-date**.
-  - Statuses: `Pending`, `Serving`, `Completed`, `Cancelled`.
-  - Live tracking via `status` command on WhatsApp.
-- **Database:** 
-  - Current: Google Sheets (Source of Truth for data) + Local JSON/Env Vars (for config).
-  - Planned: Supabase (PostgreSQL) for atomic token generation and **Live Config persistence** (to avoid manual redeploys).
-- **Services:**
-  - `services/sheets.py`: Google Sheets integration.
-  - `services/database.py`: (In-progress) Supabase integration.
-  - `services/whatsapp.py`: WhatsApp messaging integration via Meta Graph API.
-  - `services/booking_logic.py`: Core logic for WhatsApp flows, patient identification, and per-doctor queue logic.
-  - `services/calendar.py`: Integration with Google Calendar for doctor-specific appointments.
-- **Scheduler:** Integrated into `app.py` via `APScheduler`. Handles automated delivery for Medicine (interactive buttons), Test, and Appointment reminders.
+
+## Core Features
+- **Smart Queue:** Real-time patient flow monitoring with "Now Serving" updates.
+- **Doctor Management:** UI-driven management of doctors, specialties, and session timings/slots.
+- **Initials-based Tokens:** Sequential tokens per doctor/date using first and last initials (e.g., `PJ-001` for Dr. Prabhat Jain).
+- **Automated Reminders:** Medicine (interactive buttons), Test, and Appointment reminders delivered via WhatsApp.
+- **Live Analytics:** Dynamic calculation of average wait times and peak traffic visualization.
 
 ## Conventions
 - **Patient Identification:** Identified by **Name + Mobile Number + Age**.
-- **Date Standard:** System-wide standard is **`DD-MM-YYYY`**.
-- **Token Format:** `[Prefix]-[000]` (e.g., `VI-001`), unique per doctor/date.
-- **Google Sheets Database:**
-  - `[clinic]_bookings`: Master appointment list.
-  - `[clinic]_medicines`: Medicine prescriptions (16 columns explicit, includes `Time 3`).
-  - `[clinic]_test`: Medical test reminders.
-- **Medicine Reminders:** Supports interactive buttons (Taken/Skip). Defaults to 24-hour format (09:00, 14:00, 21:00).
-- **Slot Pagination:** WhatsApp List Messages are limited to **10 rows**. The booking flow automatically paginates slots with "Next/Previous" buttons if a doctor has more than 10 available times.
+- **Date Standard:** System-wide standard is **`DD-MM-YYYY`** for display and **`YYYY-MM-DD`** for Supabase queries.
+- **Token Format:** `[Initials]-[000]` (e.g., `PJ-001`), unique per doctor/date.
+- **Queue Statuses:** `Pending`, `Serving`, `Completed`, `Cancelled`, `Emergency`.
 
 ## Deployment (Render)
 - **Environment Variables:**
-  - `CLINIC_CONFIG_DATA`: Full JSON content of `clinics.json`.
-  - `CLINIC_USERS_DATA`: Full JSON content of `users.json`.
-  - `GOOGLE_CREDENTIALS`: Full JSON content of service account credentials.
-  - `VERIFY_TOKEN`: Token for WhatsApp webhook verification.
-- **Start Command:** `python app.py` (or `gunicorn --workers 1 --bind 0.0.0.0:$PORT app:app`).
+  - `SUPABASE_URL`: Your Supabase project URL.
+  - `SUPABASE_KEY`: Service Role (Secret) key for the backend bot.
+  - `WHATSAPP_TOKEN_[ID]`: Meta Access Token for specific clinics.
+  - `VERIFY_TOKEN`: WhatsApp webhook verification token.
+  - `GOOGLE_CREDENTIALS`: Service account JSON for GSheets/Calendar.
 
 ## Development Workflow
 - **Running Backend + Reminders:** `python app.py`
-- **Running Dashboard:** `streamlit run dashboard.py`
+- **Running Frontend Dashboard:** 
+  ```bash
+  cd frontend
+  npm run dev
+  ```
 
-## Troubleshooting
-- **Missing Reminders:** Check `Last Sent` column in Google Sheets. It tracks `DD-MM-YYYY@HH:MM` to prevent duplicates.
-- **Clinic Not Found:** Ensure `CLINIC_CONFIG_DATA` in Render environment matches the `phone_number_id` coming from Meta.
-- **JSON Parse Errors:** Code includes `_clean_json_env` to strip accidental quotes from environment variables.
+## Security (RLS)
+- **Multi-Tenancy:** Each staff member is linked to a `clinic_id` in the `profiles` table.
+- **Access Control:** RLS policies ensure that users can only see and manage data belonging to their own clinic.
+- **Bot Access:** The backend bot uses the `service_role` key to bypass RLS for system-wide operations.

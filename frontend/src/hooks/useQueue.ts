@@ -20,12 +20,20 @@ export function useQueue() {
 
   const fetchQueue = async () => {
     if (!profile?.clinic_id) {
-      console.warn('useQueue: No clinic_id found in profile. Ensure you have linked your user to a clinic.');
+      setLoading(false);
       return;
     }
 
-    console.log('useQueue: Fetching for clinic_id:', profile.clinic_id);
-    const today = new Date().toISOString().split('T')[0];
+    // Get today's date in IST (Asia/Kolkata)
+    const today = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(new Date());
+    
+    console.log('useQueue: Fetching for clinic_id:', profile.clinic_id, 'Date:', today);
+    setLoading(true);
     
     const { data, error } = await supabase
       .from('appointments')
@@ -36,20 +44,30 @@ export function useQueue() {
 
     if (error) {
       console.error('Error fetching queue:', error);
+      setLoading(false);
       return;
     }
 
-    const mappedQueue: Patient[] = data.map((appt: any) => ({
-      id: appt.id,
-      token: appt.token,
-      name: appt.patient_name,
-      status: appt.status.toLowerCase() as any,
-      source: appt.source === 'walkin' ? 'walk-in' : 'whatsapp',
-      wait_time_mins: calculateWaitTime(appt.created_at),
-      doctor_id: appt.doctor_id,
-      created_at: appt.created_at
-    }));
+    const mappedQueue: Patient[] = data.map((appt: any) => {
+      try {
+        const dbStatus = (appt.status || 'Pending').toLowerCase();
+        return {
+          id: appt.id,
+          token: appt.token,
+          name: appt.patient_name || 'Unknown Patient',
+          status: dbStatus === 'pending' ? 'waiting' : dbStatus as any,
+          source: appt.source === 'walkin' ? 'walk-in' : 'whatsapp',
+          wait_time_mins: calculateWaitTime(appt.created_at),
+          doctor_id: appt.doctor_id,
+          created_at: appt.created_at
+        };
+      } catch (err) {
+        console.error('Error mapping appointment:', appt, err);
+        return null;
+      }
+    }).filter(Boolean) as Patient[];
 
+    console.log('useQueue: Mapped queue size:', mappedQueue.length);
     setQueue(mappedQueue);
     setLoading(false);
   };
@@ -78,46 +96,81 @@ export function useQueue() {
   }, [profile?.clinic_id]);
 
   const markCompleted = async (id: string) => {
-    await supabase
-      .from('appointments')
-      .update({ status: 'Completed' })
-      .eq('id', id);
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .update({ status: 'Completed' })
+        .eq('id', id);
+      if (error) throw error;
+      // Optimistic update
+      setQueue(prev => prev.map(p => p.id === id ? { ...p, status: 'completed' } : p));
+    } catch (err) {
+      console.error('Error marking completed:', err);
+    }
   };
 
   const callNext = async () => {
     const nextPatient = queue.find(p => p.status === 'waiting' || p.status === 'emergency');
     if (nextPatient) {
-      await supabase
-        .from('appointments')
-        .update({ status: 'Serving' })
-        .eq('id', nextPatient.id);
+      try {
+        const { error } = await supabase
+          .from('appointments')
+          .update({ status: 'Serving' })
+          .eq('id', nextPatient.id);
+        if (error) throw error;
+        // Optimistic update
+        setQueue(prev => prev.map(p => p.id === nextPatient.id ? { ...p, status: 'serving' } : p));
+      } catch (err) {
+        console.error('Error calling next:', err);
+      }
     }
   };
 
   const prioritize = async (id: string) => {
-    await supabase
-      .from('appointments')
-      .update({ status: 'Emergency' })
-      .eq('id', id);
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .update({ status: 'Emergency' })
+        .eq('id', id);
+      if (error) throw error;
+      // Optimistic update
+      setQueue(prev => prev.map(p => p.id === id ? { ...p, status: 'emergency' } : p));
+    } catch (err) {
+      console.error('Error prioritizing:', err);
+    }
   };
 
-  const addWalkIn = async (name: string) => {
+  const addWalkIn = async (name: string, phone: string = 'walk-in', age: number = 0, doctorId: string) => {
     if (!profile?.clinic_id) return;
     
-    // We should ideally call the RPC here to get an atomic token
-    const today = new Date().toISOString().split('T')[0];
-    const { data: token, error } = await supabase.rpc('create_appointment', {
+    const today = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(new Date());
+
+    const { data, error } = await supabase.rpc('create_appointment', {
       p_clinic_id: profile.clinic_id,
-      p_doctor_id: 'General', // Default for walk-ins if not specified
+      p_doctor_id: doctorId,
       p_name: name,
-      p_phone: 'walk-in',
+      p_phone: phone,
+      p_age: age,
       p_date: today,
-      p_time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      p_time: new Date().toLocaleTimeString('en-US', { 
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true 
+      }),
       p_source: 'walkin'
     });
 
-    if (error) console.error('Error adding walk-in:', error);
-    return token;
+    if (error) {
+      console.error('Error adding walk-in:', error);
+      throw error;
+    }
+    return data; // returns { appointment_id, token, patient_id }
   };
 
   return { queue, loading, markCompleted, callNext, prioritize, addWalkIn };
