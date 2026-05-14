@@ -140,7 +140,7 @@ export function useQueue() {
     }
   };
 
-  const addWalkIn = async (name: string, phone: string = 'walk-in', age: number = 0, doctorId: string) => {
+  const addWalkIn = async (name: string, phone: string = 'walk-in', age: number = 0, doctorId: string, time?: string) => {
     if (!profile?.clinic_id) return;
     
     const today = new Intl.DateTimeFormat('en-CA', {
@@ -150,6 +150,13 @@ export function useQueue() {
       day: '2-digit'
     }).format(new Date());
 
+    const timeToUse = time || new Date().toLocaleTimeString('en-US', { 
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: true 
+    });
+
     const { data, error } = await supabase.rpc('create_appointment', {
       p_clinic_id: profile.clinic_id,
       p_doctor_id: doctorId,
@@ -157,12 +164,7 @@ export function useQueue() {
       p_phone: phone,
       p_age: age,
       p_date: today,
-      p_time: new Date().toLocaleTimeString('en-US', { 
-        timeZone: 'Asia/Kolkata',
-        hour: '2-digit', 
-        minute: '2-digit',
-        hour12: true 
-      }),
+      p_time: timeToUse,
       p_source: 'walkin'
     });
 
@@ -170,7 +172,7 @@ export function useQueue() {
       console.error('Error adding walk-in:', error);
       throw error;
     }
-    return data; // returns { appointment_id, token, patient_id }
+    return data; 
   };
 
   return { queue, loading, markCompleted, callNext, prioritize, addWalkIn };

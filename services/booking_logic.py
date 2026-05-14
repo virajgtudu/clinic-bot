@@ -1099,6 +1099,38 @@ def handle_message(clinic, message):
         send_list(clinic, phone, "Select a new date", [{"title": "Available dates", "rows": _date_rows(dates)}])
         return
 
+def _force_24h_time(raw_time: str) -> str:
+    """
+    Surgically extracts and normalizes time to HH:MM (24h).
+    Handles: '02:30 PM', '14:30', '13:45 PM', '9:15 am', etc.
+    """
+    if not raw_time:
+        return "09:00"
+    
+    # 1. Standardize case and strip whitespace
+    t = raw_time.upper().strip()
+    
+    # 2. Extract digits using regex: (hours):(minutes)
+    match = re.search(r'(\d{1,2}):(\d{2})', t)
+    if not match:
+        return "09:00"
+        
+    h, m = int(match.group(1)), match.group(2)
+    is_pm = 'PM' in t
+    is_am = 'AM' in t
+    
+    # 3. Logic-based conversion
+    if is_pm and h < 12:
+        h += 12
+    elif is_am and h == 12:
+        h = 0
+    # If it's already > 12 (like 13:45), we ignore AM/PM markers as they are redundant/wrong
+    
+    return f"{h:02d}:{m}"
+
+
+def handle_message(clinic, message):
+...
     if step == "confirm" and text == "confirm":
         doctor = session.get("doctor", {})
         date_val = session.get("date_value") # DD-MM-YYYY
@@ -1106,14 +1138,18 @@ def handle_message(clinic, message):
         # 1. Save to Supabase and get Token
         try:
             db_date = datetime.strptime(date_val, "%d-%m-%Y").strftime("%Y-%m-%d")
+            
+            # Use bulletproof cleaner
+            clean_time = _force_24h_time(session.get("selected_time", "09:00"))
+
             sb_data = {
                 "clinic_id": clinic_id,
-                "doctor_id": doctor.get("name"),
+                "doctor_id": doctor.get("id"), # Use UUID ID instead of Name
                 "name": session.get("name"),
                 "phone": _normalize_phone(phone),
                 "age": session.get("age"),
                 "booking_date": db_date,
-                "time": session.get("selected_time"),
+                "time": clean_time,
                 "source": "whatsapp"
             }
             sb_res = create_appointment(sb_data)

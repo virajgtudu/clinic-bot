@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 interface WalkInModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (name: string, phone: string, age: number, doctorId: string) => Promise<any>;
+  onSubmit: (name: string, phone: string, age: number, doctorId: string, time: string) => Promise<any>;
   doctors: any[];
 }
 
@@ -14,6 +14,7 @@ export function WalkInModal({ isOpen, onClose, onSubmit, doctors }: WalkInModalP
   const [phone, setPhone] = useState('');
   const [age, setAge] = useState<string>('');
   const [doctorId, setDoctorId] = useState('');
+  const [selectedTime, setSelectedTime] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -28,16 +29,43 @@ export function WalkInModal({ isOpen, onClose, onSubmit, doctors }: WalkInModalP
 
     setLoading(true);
     try {
-      await onSubmit(name, phone || 'walk-in', parseInt(age) || 0, doctorId);
+      let timeToUse = selectedTime || new Date().toLocaleTimeString('en-US', { 
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true 
+      });
+
+      // Convert to 24h format for consistent DB comparison (e.g., "04:00 PM" -> "16:00")
+      try {
+        const [time, modifier] = timeToUse.split(' ');
+        let [hours, minutes] = time.split(':');
+        if (hours === '12') hours = '00';
+        if (modifier === 'PM') hours = (parseInt(hours, 10) + 12).toString();
+        timeToUse = `${hours.padStart(2, '0')}:${minutes}`;
+      } catch (err) {
+        console.warn('Time conversion failed, sending raw:', timeToUse);
+      }
+
+      await onSubmit(name, phone || 'walk-in', parseInt(age) || 0, doctorId, timeToUse);
       setName('');
       setPhone('');
       setAge('');
+      setSelectedTime('');
       onClose();
     } catch (error) {
       console.error('Error adding walk-in:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const getDoctorSlots = () => {
+    const doc = doctors.find(d => d.id === doctorId);
+    if (!doc?.availability_json) return [];
+    // Just get slots from the first day for simplicity, or "Now"
+    const firstDay = Object.values(doc.availability_json)[0] as any;
+    return firstDay?.slots || [];
   };
 
   return (
@@ -112,19 +140,35 @@ export function WalkInModal({ isOpen, onClose, onSubmit, doctors }: WalkInModalP
                 </div>
               </div>
 
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Consulting Doctor</label>
-                <select
-                  value={doctorId}
-                  onChange={(e) => setDoctorId(e.target.value)}
-                  className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-transparent focus:border-brand-500/30 focus:bg-white dark:focus:bg-slate-900 rounded-2xl text-sm font-bold transition-all outline-none dark:text-white cursor-pointer"
-                  required
-                >
-                  <option value="" disabled>Select Doctor</option>
-                  {doctors.map(doc => (
-                    <option key={doc.id} value={doc.id}>{doc.name} ({doc.specialty})</option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Consulting Doctor</label>
+                  <select
+                    value={doctorId}
+                    onChange={(e) => setDoctorId(e.target.value)}
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-transparent focus:border-brand-500/30 focus:bg-white dark:focus:bg-slate-900 rounded-2xl text-sm font-bold transition-all outline-none dark:text-white cursor-pointer"
+                    required
+                  >
+                    <option value="" disabled>Select Doctor</option>
+                    {doctors.map(doc => (
+                      <option key={doc.id} value={doc.id}>{doc.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Appt. Time</label>
+                  <select
+                    value={selectedTime}
+                    onChange={(e) => setSelectedTime(e.target.value)}
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-transparent focus:border-brand-500/30 focus:bg-white dark:focus:bg-slate-900 rounded-2xl text-sm font-bold transition-all outline-none dark:text-white cursor-pointer"
+                  >
+                    <option value="">Current Time</option>
+                    {getDoctorSlots().map((slot: string) => (
+                      <option key={slot} value={slot}>{slot}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <button
