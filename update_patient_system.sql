@@ -80,6 +80,16 @@ BEGIN
 END;
 $$;
 
+-- Enable RLS on Patients
+ALTER TABLE patients ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Clinic staff can manage their own patients
+DROP POLICY IF EXISTS "Clinic staff can manage their patients" ON patients;
+CREATE POLICY "Clinic staff can manage their patients"
+ON patients FOR ALL TO authenticated
+USING (clinic_id IN (SELECT clinic_id FROM profiles WHERE id = auth.uid()))
+WITH CHECK (clinic_id IN (SELECT clinic_id FROM profiles WHERE id = auth.uid()));
+
 -- 5. Trigger for "Next in Queue" Notifications
 -- Note: This requires the 'http' extension in Supabase to be enabled.
 -- Run: CREATE EXTENSION IF NOT EXISTS http;
@@ -88,7 +98,8 @@ CREATE OR REPLACE FUNCTION notify_next_patient()
 RETURNS trigger AS $$
 DECLARE
   next_patient RECORD;
-  clinic_url TEXT := 'https://your-flask-app.render.com/webhook/notify-next'; -- This should be dynamic or env-based
+  -- IMPORTANT: Replace with your actual deployed Flask app URL or ngrok URL
+  clinic_url TEXT := 'https://clinicassist-qu4i.onrender.com/webhook/notify-next'; 
 BEGIN
   -- 1. Notify the NEXT patient when current one moves to 'Serving'
   IF (TG_OP = 'UPDATE' AND NEW.status = 'Serving' AND OLD.status != 'Serving') THEN
@@ -103,21 +114,40 @@ BEGIN
     ORDER BY a.token ASC
     LIMIT 1;
 
-    IF FOUND THEN
-      -- PERFORM http_post(clinic_url, jsonb_build_object('phone', next_patient.phone, ...));
-      RAISE NOTICE 'Notifying next patient: %', next_patient.patient_name;
+    IF FOUND AND next_patient.phone != 'walk-in' THEN
+      -- Use Supabase built-in http extension to ping the backend
+      PERFORM net.http_post(
+        url := clinic_url,
+        body := jsonb_build_object(
+          'phone', next_patient.phone,
+          'patient_name', next_patient.patient_name,
+          'doctor_id', next_patient.doctor_id,
+          'token', next_patient.token,
+          'clinic_id', next_patient.clinic_id
+        )::text,
+        headers := '{"Content-Type": "application/json"}'::jsonb
+      );
     END IF;
   END IF;
 
   -- 2. Notify NEW walk-in patients immediately
-  IF (TG_OP = 'INSERT' AND NEW.source = 'walkin') THEN
-      -- PERFORM http_post(clinic_url || '/confirm-walkin', jsonb_build_object('phone', NEW.phone, ...));
-      RAISE NOTICE 'Confirming walk-in: %', NEW.patient_name;
+  IF (TG_OP = 'INSERT' AND NEW.source = 'walkin' AND NEW.phone != 'walk-in') THEN
+      PERFORM net.http_post(
+        url := clinic_url || '/confirm-walkin',
+        body := jsonb_build_object(
+          'phone', NEW.phone,
+          'patient_name', NEW.patient_name,
+          'doctor_id', NEW.doctor_id,
+          'token', NEW.token,
+          'clinic_id', NEW.clinic_id
+        )::text,
+        headers := '{"Content-Type": "application/json"}'::jsonb
+      );
   END IF;
 
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER; -- Use SECURITY DEFINER to bypass RLS for the trigger itself if needed
 
 DROP TRIGGER IF EXISTS on_appointment_serving ON appointments;
 CREATE TRIGGER on_appointment_serving
