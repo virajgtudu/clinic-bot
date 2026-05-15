@@ -2,22 +2,19 @@ import React, { useState } from 'react';
 import { 
   Plus, 
   Search, 
-  Filter, 
   Pill, 
   FileText, 
   Calendar, 
-  MoreVertical, 
   Trash2, 
   CheckCircle2, 
   Clock,
   Activity,
-  ChevronRight,
   TrendingUp,
   AlertCircle
 } from 'lucide-react';
-import { motion } from 'framer-motion';
 import { cn } from '../lib/utils';
-import { useReminders, Reminder } from '../hooks/useReminders';
+import { useReminders } from '../hooks/useReminders';
+import type { Reminder } from '../hooks/useReminders';
 import { CreateReminderModal } from './CreateReminderModal';
 
 export function RemindersView() {
@@ -28,8 +25,8 @@ export function RemindersView() {
 
   const filteredReminders = reminders.filter(r => {
     const matchesFilter = filter === 'all' || r.type === filter;
-    const matchesSearch = r.patient_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                         r.item_name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = (r.patient_name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
+                         (r.item_name || '').toLowerCase().includes(searchQuery.toLowerCase());
     return matchesFilter && matchesSearch;
   });
 
@@ -142,7 +139,7 @@ export function RemindersView() {
                     <td className="px-8 py-6">
                       <div className="flex items-center gap-4">
                         <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-black text-slate-500">
-                          {reminder.patient_name[0].toUpperCase()}
+                          {reminder.patient_name ? reminder.patient_name[0].toUpperCase() : '?'}
                         </div>
                         <div>
                           <div className="font-bold dark:text-white">{reminder.patient_name}</div>
@@ -166,7 +163,7 @@ export function RemindersView() {
                           {reminder.frequency}
                         </div>
                         <div className="flex gap-1">
-                          {reminder.times.map((t, i) => (
+                          {(reminder.times || []).map((t, i) => (
                             <span key={i} className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-md font-bold text-slate-500">
                               {t}
                             </span>

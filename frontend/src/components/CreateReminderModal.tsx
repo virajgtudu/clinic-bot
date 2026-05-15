@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { X, Pill, FileText, Calendar, Clock, AlertCircle } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { X, Pill, FileText, Calendar, Clock } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { cn } from '../lib/utils';
 
 interface CreateReminderModalProps {

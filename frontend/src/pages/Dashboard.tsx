@@ -480,7 +480,7 @@ function AppointmentsView() {
     if (startDate) query = query.gte('booking_date', startDate);
     if (endDate) query = query.lte('booking_date', endDate);
 
-    const { data, error } = await query
+    const { data } = await query
       .order('booking_date', { ascending: false })
       .order('token', { ascending: false })
       .limit(200);
@@ -693,13 +693,12 @@ function AppointmentsView() {
 function PatientsView() {
   const { profile } = useAuth();
   const [patients, setPatients] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchPatients = async () => {
       if (!profile?.clinic_id) return;
       // Get unique patients by name and phone
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('appointments')
         .select('patient_name, phone, created_at')
         .eq('clinic_id', profile.clinic_id)
@@ -714,7 +713,6 @@ function PatientsView() {
         }, []);
         setPatients(unique);
       }
-      setLoading(false);
     };
     fetchPatients();
   }, [profile?.clinic_id]);
@@ -747,7 +745,6 @@ function PatientsView() {
 }
 
 function AnalyticsView() {
-  const { queue } = useQueue();
   return (
     <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
