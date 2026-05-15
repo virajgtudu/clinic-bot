@@ -18,7 +18,8 @@ import {
   Stethoscope,
   LogOut,
   Loader2,
-  ChevronRight
+  ChevronRight,
+  ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -907,36 +908,58 @@ function DoctorSettings() {
   
   const [name, setName] = useState('');
   const [specialty, setSpecialty] = useState('');
-  const [slots, setSlots] = useState('09:00 AM, 10:00 AM, 11:00 AM, 12:00 PM, 03:00 PM, 04:00 PM');
+  const [qualifications, setQualifications] = useState('');
+  const [experience, setExperience] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const availability = {
-      monday: { enabled: true, slots: slots.split(',').map(s => s.trim()) },
-      tuesday: { enabled: true, slots: slots.split(',').map(s => s.trim()) },
-      wednesday: { enabled: true, slots: slots.split(',').map(s => s.trim()) },
-      thursday: { enabled: true, slots: slots.split(',').map(s => s.trim()) },
-      friday: { enabled: true, slots: slots.split(',').map(s => s.trim()) },
-      saturday: { enabled: true, slots: slots.split(',').map(s => s.trim()) },
+    
+    const payload = { 
+      name, 
+      specialty, 
+      qualifications, 
+      experience 
     };
 
     if (editingDoctor) {
-      await updateDoctor(editingDoctor.id, { name, specialty, availability_json: availability });
+      await updateDoctor(editingDoctor.id, payload);
       setEditingDoctor(null);
     } else {
-      await addDoctor({ name, specialty, availability_json: availability });
+      // Default dynamic availability if creating new
+      const defaultAvailability = {
+        version: "2.0",
+        weekly: {
+          monday: { enabled: true, sessions: [{ start: "09:00 AM", end: "01:00 PM" }] },
+          tuesday: { enabled: true, sessions: [{ start: "09:00 AM", end: "01:00 PM" }] },
+          wednesday: { enabled: true, sessions: [{ start: "09:00 AM", end: "01:00 PM" }] },
+          thursday: { enabled: true, sessions: [{ start: "09:00 AM", end: "01:00 PM" }] },
+          friday: { enabled: true, sessions: [{ start: "09:00 AM", end: "01:00 PM" }] },
+          saturday: { enabled: false, sessions: [] },
+          sunday: { enabled: false, sessions: [] },
+        },
+        consultation_duration: 15,
+        advanced: {
+          max_patients_per_day: 40,
+          emergency_buffer: 2,
+          gap_buffer: 5,
+          blocked_dates: [],
+        }
+      };
+      await addDoctor({ ...payload, availability_json: defaultAvailability });
       setIsAdding(false);
     }
     setName('');
     setSpecialty('');
+    setQualifications('');
+    setExperience('');
   };
 
   const startEdit = (doc: Doctor) => {
     setEditingDoctor(doc);
     setName(doc.name);
     setSpecialty(doc.specialty || '');
-    const firstDay = Object.values(doc.availability_json || {})[0] as any;
-    setSlots(firstDay?.slots?.join(', ') || '');
+    setQualifications(doc.qualifications || '');
+    setExperience(doc.experience || '');
     setIsAdding(true);
   };
 
@@ -945,11 +968,11 @@ function DoctorSettings() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-black dark:text-white tracking-tight">Doctor Management</h2>
-          <p className="text-slate-500 dark:text-slate-400 font-medium mt-1">Configure your clinic's medical staff and their session timings</p>
+          <p className="text-slate-500 dark:text-slate-400 font-medium mt-1">Configure your clinic's medical staff profiles</p>
         </div>
         {!isAdding && (
           <button 
-            onClick={() => { setIsAdding(true); setEditingDoctor(null); setName(''); setSpecialty(''); }}
+            onClick={() => { setIsAdding(true); setEditingDoctor(null); setName(''); setSpecialty(''); setQualifications(''); setExperience(''); }}
             className="px-6 py-3 bg-brand-500 text-white font-black rounded-2xl hover:bg-brand-600 transition-all shadow-lg shadow-brand-500/25 flex items-center gap-2"
           >
             <UserPlus size={18} /> Add New Doctor
@@ -960,7 +983,7 @@ function DoctorSettings() {
       {isAdding && (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white dark:bg-slate-900 p-10 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-xl">
           <form onSubmit={handleSubmit} className="space-y-8">
-            <div className="grid grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Doctor Full Name</label>
                 <input 
@@ -970,25 +993,45 @@ function DoctorSettings() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Specialty</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Specialty / Primary Focus</label>
                 <input 
                   type="text" value={specialty} onChange={e => setSpecialty(e.target.value)}
-                  placeholder="e.g. Cardiologist"
+                  placeholder="e.g. Cardiologist, Orthopedic Surgeon"
                   className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-transparent focus:border-brand-500/30 focus:bg-white dark:focus:bg-slate-900 rounded-2xl text-sm font-bold transition-all outline-none dark:text-white"
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Availability Slots (Comma separated)</label>
-              <textarea 
-                rows={3} value={slots} onChange={e => setSlots(e.target.value)} required
-                className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-transparent focus:border-brand-500/30 focus:bg-white dark:focus:bg-slate-900 rounded-2xl text-sm font-bold transition-all outline-none dark:text-white"
-              />
-              <p className="text-[10px] text-slate-400 font-bold ml-1">Format: 09:00 AM, 09:30 AM, 10:00 AM...</p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Qualifications & Degrees</label>
+                <textarea 
+                  rows={2} value={qualifications} onChange={e => setQualifications(e.target.value)}
+                  placeholder="e.g. MBBS, MD (Medicine), DM (Cardiology)"
+                  className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-transparent focus:border-brand-500/30 focus:bg-white dark:focus:bg-slate-900 rounded-2xl text-sm font-bold transition-all outline-none dark:text-white"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Years of Experience / Bio</label>
+                <textarea 
+                  rows={2} value={experience} onChange={e => setExperience(e.target.value)}
+                  placeholder="e.g. 15+ years of clinical experience in tertiary care hospitals."
+                  className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-transparent focus:border-brand-500/30 focus:bg-white dark:focus:bg-slate-900 rounded-2xl text-sm font-bold transition-all outline-none dark:text-white"
+                />
+              </div>
             </div>
+
+            <div className="bg-brand-50/50 dark:bg-brand-900/10 p-6 rounded-3xl border border-brand-100/50 dark:border-brand-900/30">
+               <div className="flex items-center gap-3 text-brand-600 dark:text-brand-400 mb-2">
+                  <ShieldCheck size={18} />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Dynamic Scheduling Enabled</span>
+               </div>
+               <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed font-medium">Session timings are now managed separately via the <span className="font-black text-brand-500">Doctor Availability</span> dashboard for better accuracy and WhatsApp booking support.</p>
+            </div>
+
             <div className="flex gap-4 pt-4">
-              <button type="submit" className="flex-1 py-4 bg-brand-500 text-white font-black rounded-2xl hover:bg-brand-600 transition-all shadow-lg shadow-brand-500/25">
-                {editingDoctor ? 'Update Doctor' : 'Save Doctor'}
+              <button type="submit" className="flex-1 py-4 bg-brand-500 text-white font-black rounded-2xl hover:bg-brand-600 transition-all shadow-lg shadow-brand-500/25 active:scale-95">
+                {editingDoctor ? 'Update Profile' : 'Create Profile'}
               </button>
               <button type="button" onClick={() => setIsAdding(false)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-black rounded-2xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-all">
                 Cancel
@@ -1013,20 +1056,29 @@ function DoctorSettings() {
                   <Stethoscope size={32} />
                 </div>
                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => startEdit(doc)} className="p-2 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-brand-500 rounded-lg transition-colors"><Settings size={16} /></button>
-                  <button onClick={() => { if(confirm('Delete this doctor?')) deleteDoctor(doc.id); }} className="p-2 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-rose-500 rounded-lg transition-colors"><AlertCircle size={16} /></button>
+                  <button onClick={() => startEdit(doc)} className="p-2 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-brand-500 rounded-lg transition-colors" title="Edit Profile"><Settings size={16} /></button>
+                  <button onClick={() => { if(confirm('Delete this doctor?')) deleteDoctor(doc.id); }} className="p-2 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-rose-500 rounded-lg transition-colors" title="Remove Doctor"><AlertCircle size={16} /></button>
                 </div>
               </div>
               <h4 className="text-xl font-black dark:text-white">{doc.name}</h4>
-              <p className="text-xs font-bold text-brand-500 uppercase tracking-widest mt-1">{doc.specialty || 'General Physician'}</p>
+              <p className="text-xs font-bold text-brand-500 uppercase tracking-widest mt-1 mb-2">{doc.specialty || 'General Physician'}</p>
               
-              <div className="mt-8 pt-8 border-t border-slate-50 dark:border-slate-800 flex items-center justify-between">
+              {doc.qualifications && (
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold leading-relaxed mb-4 line-clamp-2">
+                  {doc.qualifications}
+                </p>
+              )}
+
+              <div className="mt-4 pt-6 border-t border-slate-50 dark:border-slate-800 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Clock size={14} className="text-slate-400" />
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Slots</span>
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Schedule Status</span>
                 </div>
-                <span className="px-3 py-1 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 text-[10px] font-black rounded-full">
-                  {(Object.values(doc.availability_json || {})[0] as any)?.slots?.length || 0} Slots
+                <span className={cn(
+                  "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest",
+                  doc.availability_json?.version === "2.0" ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400" : "bg-slate-100 dark:bg-slate-800 text-slate-400"
+                )}>
+                  {doc.availability_json?.version === "2.0" ? 'Configured' : 'Legacy'}
                 </span>
               </div>
             </div>

@@ -7,6 +7,8 @@ export interface Doctor {
   clinic_id: string;
   name: string;
   specialty: string;
+  qualifications?: string;
+  experience?: string;
   availability_json: any;
   created_at: string;
 }
