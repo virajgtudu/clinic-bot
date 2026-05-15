@@ -40,6 +40,7 @@ import { RemindersView } from '../components/RemindersView';
 import { FollowUpModal } from '../components/FollowUpModal';
 import { useReminders } from '../hooks/useReminders';
 import { DoctorAvailabilityManager } from '../components/DoctorAvailabilityManager';
+import { PatientsView } from '../components/PatientsView';
 
 const busiestHoursData = [
   { name: '9am', value: 40 },
@@ -734,60 +735,6 @@ function AppointmentsView() {
               </tbody>
             </table>
           )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function PatientsView() {
-  const { profile } = useAuth();
-  const [patients, setPatients] = useState<any[]>([]);
-
-  useEffect(() => {
-    const fetchPatients = async () => {
-      if (!profile?.clinic_id) return;
-      // Get unique patients by name and phone
-      const { data } = await supabase
-        .from('appointments')
-        .select('patient_name, phone, created_at')
-        .eq('clinic_id', profile.clinic_id)
-        .order('created_at', { ascending: false });
-
-      if (data) {
-        const unique = data.reduce((acc: any[], curr: any) => {
-          if (!acc.find(p => p.phone === curr.phone && p.patient_name === curr.patient_name)) {
-            acc.push(curr);
-          }
-          return acc;
-        }, []);
-        setPatients(unique);
-      }
-    };
-    fetchPatients();
-  }, [profile?.clinic_id]);
-
-  return (
-    <div className="bg-white dark:bg-slate-900 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="p-10 border-b border-slate-50 dark:border-slate-800">
-        <h2 className="text-2xl font-black dark:text-white">Patient Directory</h2>
-        <p className="text-xs text-slate-500 font-medium mt-1">Manage your unique patient database</p>
-      </div>
-      <div className="p-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {patients.map((p, idx) => (
-            <div key={idx} className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-[2rem] border border-slate-100 dark:border-slate-800 group hover:border-brand-500/30 transition-all">
-              <div className="w-12 h-12 rounded-xl bg-white dark:bg-slate-900 flex items-center justify-center text-brand-500 mb-4 shadow-sm">
-                <Users size={24} />
-              </div>
-              <h4 className="font-black text-slate-800 dark:text-white">{p.patient_name}</h4>
-              <p className="text-xs font-bold text-slate-500 mt-1">{p.phone}</p>
-              <div className="mt-6 pt-6 border-t border-slate-200/50 dark:border-slate-700/50 flex items-center justify-between">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Last Visit</span>
-                <span className="text-[10px] font-black text-brand-500 uppercase">{new Date(p.created_at).toLocaleDateString()}</span>
-              </div>
-            </div>
-          ))}
         </div>
       </div>
     </div>
