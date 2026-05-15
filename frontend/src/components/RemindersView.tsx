@@ -23,15 +23,18 @@ export function RemindersView() {
   const [filter, setFilter] = useState<'all' | 'medication' | 'test' | 'follow_up' | 'today_follow_up'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
 
   const filteredReminders = reminders.filter(r => {
+    if (!r) return false;
     if (filter === 'today_follow_up') {
       return r.type === 'follow_up' && r.start_date === todayStr && (r.status === 'Active' || r.status === 'Missed');
     }
     const matchesFilter = filter === 'all' || r.type === filter;
-    const matchesSearch = (r.patient_name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
-                         (r.item_name || '').toLowerCase().includes(searchQuery.toLowerCase());
+    const patientName = r.patient_name || '';
+    const itemName = r.item_name || '';
+    const matchesSearch = patientName.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                         itemName.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesFilter && matchesSearch;
   });
 

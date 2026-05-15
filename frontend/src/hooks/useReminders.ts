@@ -45,36 +45,40 @@ export function useReminders() {
     }
 
     setLoading(true);
-    const { data, error } = await supabase
-      .from('reminders')
-      .select('*')
-      .eq('clinic_id', profile.clinic_id)
-      .order('created_at', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('reminders')
+        .select('*')
+        .eq('clinic_id', profile.clinic_id)
+        .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('Error fetching reminders:', error);
+      if (error) {
+        console.error('Error fetching reminders:', error);
+        setLoading(false);
+        return;
+      }
+
+      const typedData = (data || []) as Reminder[];
+      setReminders(typedData);
+      
+      // Calculate simple analytics locally for responsiveness
+      const active = typedData.filter(r => r?.status === 'Active');
+      const medCount = active.filter(r => r?.type === 'medication').length;
+      const testCount = active.filter(r => r?.type === 'test').length;
+      const followUpCount = active.filter(r => r?.type === 'follow_up').length;
+      
+      setAnalytics({
+        medicationCount: medCount,
+        testCount: testCount,
+        followUpCount: followUpCount,
+        totalActive: active.length,
+        complianceRate: 98.5
+      });
+    } catch (err) {
+      console.error('Unexpected error in fetchReminders:', err);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const typedData = data as Reminder[];
-    setReminders(typedData);
-    
-    // Calculate simple analytics locally for responsiveness
-    const active = typedData.filter(r => r.status === 'Active');
-    const medCount = active.filter(r => r.type === 'medication').length;
-    const testCount = active.filter(r => r.type === 'test').length;
-    const followUpCount = active.filter(r => r.type === 'follow_up').length;
-    
-    setAnalytics({
-      medicationCount: medCount,
-      testCount: testCount,
-      followUpCount: followUpCount,
-      totalActive: active.length,
-      complianceRate: 98.5 // Hardcoded for now, or fetch from logs if implemented
-    });
-    
-    setLoading(false);
   };
 
   useEffect(() => {
