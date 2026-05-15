@@ -34,8 +34,22 @@ def notify_next():
     if not clinic:
         return jsonify({"error": "Clinic not found"}), 404
 
+    # Fetch doctor name if doctor_id is a UUID
+    doctor_display_name = doctor_id
+    try:
+        from services.database import get_db
+        db = get_db()
+        if db:
+            # Check if doctor_id is a UUID (roughly)
+            if re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', str(doctor_id).lower()):
+                res = db.table("doctors").select("name").eq("id", doctor_id).execute()
+                if res.data:
+                    doctor_display_name = res.data[0].get("name", doctor_id)
+    except Exception as e:
+        current_app.logger.error(f"Error fetching doctor name for notification: {e}")
+
     # Format token nicely: [Prefix]-[000]
-    clean_name = re.sub(r'^Dr\.?\s+', '', doctor_id, flags=re.IGNORECASE).strip()
+    clean_name = re.sub(r'^Dr\.?\s+', '', doctor_display_name, flags=re.IGNORECASE).strip()
     name_parts = clean_name.split()
     if len(name_parts) >= 2:
         prefix = (name_parts[0][0] + name_parts[-1][0]).upper()
@@ -48,7 +62,7 @@ def notify_next():
 
     message = (
         f"🔔 *Queue Update*\n\n"
-        f"Hi {patient_name}, {doctor_id} is ready. "
+        f"Hi {patient_name}, {doctor_display_name} is ready.\n"
         f"You are *next* in queue (Token: {formatted_token}).\n\n"
         f"Please be ready and proceed to the consultation room soon!"
     )
