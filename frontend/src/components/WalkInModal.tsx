@@ -63,7 +63,58 @@ export function WalkInModal({ isOpen, onClose, onSubmit, doctors }: WalkInModalP
   const getDoctorSlots = () => {
     const doc = doctors.find(d => d.id === doctorId);
     if (!doc?.availability_json) return [];
-    // Just get slots from the first day for simplicity, or "Now"
+    
+    const avail = doc.availability_json;
+    
+    // Handle new schema (version 2.0)
+    if (avail.version === "2.0") {
+      const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      const todayName = days[new Date().getDay()];
+      const dayConfig = avail.weekly?.[todayName];
+
+      if (!dayConfig?.enabled) return [];
+
+      const sessions = dayConfig.sessions || [];
+      const duration = avail.consultation_duration || 15;
+      const allSlots: string[] = [];
+
+      sessions.forEach((sess: any) => {
+        if (!sess.start || !sess.end) return;
+        
+        try {
+          // Simple time generator for the UI
+          const parseTime = (t: string) => {
+            const [time, modifier] = t.split(' ');
+            let [h, m] = time.split(':').map(Number);
+            if (modifier === 'PM' && h < 12) h += 12;
+            if (modifier === 'AM' && h === 12) h = 0;
+            return h * 60 + m;
+          };
+
+          const formatTime = (totalMin: number) => {
+            let h = Math.floor(totalMin / 60);
+            const m = totalMin % 60;
+            const modifier = h >= 12 ? 'PM' : 'AM';
+            if (h > 12) h -= 12;
+            if (h === 0) h = 12;
+            return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} ${modifier}`;
+          };
+
+          let current = parseTime(sess.start);
+          const end = parseTime(sess.end);
+
+          while (current < end) {
+            allSlots.push(formatTime(current));
+            current += duration;
+          }
+        } catch (e) {
+          console.error('Error generating walk-in slots:', e);
+        }
+      });
+      return allSlots;
+    }
+
+    // Backward compatibility: handle old list-based structure
     const firstDay = Object.values(doc.availability_json)[0] as any;
     return firstDay?.slots || [];
   };
