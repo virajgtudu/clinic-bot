@@ -222,29 +222,57 @@ BANNED_WORDS = ["gym", "water", "meeting", "study"]
 def _has_active_prescription_session(clinic, phone):
     """Check if the patient has 'Completed' bookings in the last 48 hours and return unique names."""
     try:
-        sheet = open_sheet(clinic.get("sheet_name"), clinic.get("sheet_id"))
-        rows = sheet.get_all_records()
+        db = get_db()
+        if not db:
+            raise Exception("Database not available")
+        
+        clinic_id = clinic["phone_number_id"]
         normalized_phone = _normalize_phone(phone)
         now = get_now()
-        completed_patients = []
-        for row in reversed(rows):
-            if _normalize_phone(row.get("Phone")) == normalized_phone:
-                if row.get("Status") != "Completed":
-                    continue
-                booked_at_str = row.get("Booked At")
-                if not booked_at_str:
-                    continue
-                try:
-                    booked_at = datetime.strptime(booked_at_str, "%d-%m-%Y %H:%M")
-                    if (now - booked_at).total_seconds() < 48 * 3600:
-                        name = row.get("Name")
-                        if name and name not in completed_patients:
-                            completed_patients.append(name)
-                except ValueError:
-                    continue
-        return completed_patients
+        since = (now - timedelta(hours=48)).strftime("%Y-%m-%d %H:%M:%S")
+
+        # Query Supabase appointments table
+        response = db.table("appointments") \
+            .select("patient_name") \
+            .eq("clinic_id", clinic_id) \
+            .eq("phone", normalized_phone) \
+            .eq("status", "Completed") \
+            .gte("created_at", since) \
+            .execute()
+        
+        if response.data:
+            # Return unique patient names
+            return list(set(r["patient_name"] for r in response.data))
+            
     except Exception as exc:
-        logger.error("Error checking prescription session: %s", exc)
+        logger.error("Error checking prescription session via Supabase: %s", exc)
+        
+        # Fallback to Sheet if Supabase fails (Original logic)
+        try:
+            sheet = open_sheet(clinic.get("sheet_name"), clinic.get("sheet_id"))
+            rows = sheet.get_all_records()
+            normalized_phone = _normalize_phone(phone)
+            now = get_now()
+            completed_patients = []
+            for row in reversed(rows):
+                if _normalize_phone(row.get("Phone")) == normalized_phone:
+                    if row.get("Status") != "Completed":
+                        continue
+                    booked_at_str = row.get("Booked At")
+                    if not booked_at_str:
+                        continue
+                    try:
+                        booked_at = datetime.strptime(booked_at_str, "%d-%m-%Y %H:%M")
+                        if (now - booked_at).total_seconds() < 48 * 3600:
+                            name = row.get("Name")
+                            if name and name not in completed_patients:
+                                completed_patients.append(name)
+                    except ValueError:
+                        continue
+            return completed_patients
+        except Exception as sheet_exc:
+            logger.error("Fallback sheet check failed: %s", sheet_exc)
+            
     return []
 
 
@@ -367,16 +395,16 @@ def _handle_patient_reminder_flow(clinic, phone, text, raw_text, key, session):
         details = _staff_frequency_details(choice)
         frequency_label, reminder_times = details
         user_sessions[key] = {**session, "step": "patient_rem_duration", "freq_label": frequency_label, "times": reminder_times}
-        send_text(clinic, phone, "How many days? (Max 10 days)")
+        send_text(clinic, phone, "How many days? (Max 14 days)")
         return True
 
     if step == "patient_rem_duration":
         try:
             days = int(raw_text.strip())
-            if days < 1 or days > 10:
+            if days < 1 or days > 14:
                 raise ValueError
         except ValueError:
-            send_text(clinic, phone, "Enter a valid number of days (1-10)")
+            send_text(clinic, phone, "Enter a valid number of days (1-14)")
             return True
         
         now = get_now()
