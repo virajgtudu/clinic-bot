@@ -100,26 +100,63 @@ def _doctor_rows(doctors):
     ]
 
 
+def _get_available_slots(doctor, date_obj):
+    """Generate dynamic slots from doctor's availability_json."""
+    avail = doctor.get("availability_json", {})
+    if not avail:
+        return ["09:00 AM", "10:00 AM", "11:00 AM", "12:00 PM"]
+    
+    # Check if this is the new schema (version 2.0)
+    if avail.get("version") == "2.0":
+        day_name = date_obj.strftime("%A").lower()
+        day_config = avail.get("weekly", {}).get(day_name, {})
+        
+        if not day_config.get("enabled"):
+            return []
+            
+        sessions = day_config.get("sessions", [])
+        duration = avail.get("consultation_duration", 15)
+        
+        # Block dates check
+        date_str = date_obj.strftime("%Y-%m-%d")
+        if date_str in avail.get("advanced", {}).get("blocked_dates", []):
+            return []
+
+        all_slots = []
+        for sess in sessions:
+            start_str = sess.get("start")
+            end_str = sess.get("end")
+            if not (start_str and end_str):
+                continue
+                
+            try:
+                # Use _force_24h_time to normalize then parse
+                h_start, m_start = map(int, _force_24h_time(start_str).split(':'))
+                h_end, m_end = map(int, _force_24h_time(end_str).split(':'))
+                
+                curr = datetime.combine(date_obj, time(h_start, m_start))
+                end_dt = datetime.combine(date_obj, time(h_end, m_end))
+                
+                while curr < end_dt:
+                    all_slots.append(curr.strftime("%I:%M %p"))
+                    curr += timedelta(minutes=duration)
+            except Exception as e:
+                logger.error(f"Error generating slots for session {sess}: {e}")
+                
+        return all_slots
+    
+    # Backward compatibility: handle old list-based structure
+    day_name = date_obj.strftime("%A").lower()
+    day_config = avail.get(day_name, {})
+    if isinstance(day_config, dict):
+        return day_config.get("slots") or []
+    return []
+
+
 def _is_doctor_available_on(doctor, date_obj):
     """Check if the doctor is available on a specific day of the week."""
-    # 1. Check dynamic availability_json (Supabase)
-    avail_json = doctor.get("availability_json")
-    if avail_json:
-        day_name = date_obj.strftime("%A").lower() # e.g. "monday"
-        day_config = avail_json.get(day_name, {})
-        return day_config.get("enabled", False)
-
-    # 2. Fallback to static availability (clinics.json)
-    availability = doctor.get("availability", {})
-    if availability.get("mode") == "Manual Slots":
-        return True  # Assume always available for manual mode
-        
-    allowed_days = availability.get("days", [])
-    if not allowed_days:
-        return True
-        
-    day_name_short = date_obj.strftime("%a") # e.g. "Mon"
-    return day_name_short in allowed_days
+    slots = _get_available_slots(doctor, date_obj)
+    return len(slots) > 0
 
 
 def _date_options(doctor, days=7):
@@ -1130,18 +1167,13 @@ def handle_message(clinic, message):
 
         doctor = session.get("doctor", {})
         # Extract slots based on dynamic availability_json or fallback to static slots
-        slots = []
-        avail = doctor.get("availability_json")
-        if avail:
-            # Map DD-MM-YYYY to weekday name
-            dt_obj = datetime.strptime(selected_date["value"], "%d-%m-%Y")
-            day_name = dt_obj.strftime("%A").lower()
-            day_config = avail.get(day_name, {})
-            if day_config.get("enabled"):
-                slots = day_config.get("slots", [])
+        # 1. Get dynamic slots for this specific date
+        dt_obj = datetime.strptime(selected_date["value"], "%d-%m-%Y")
+        slots = _get_available_slots(doctor, dt_obj)
         
         if not slots:
-            slots = doctor.get("slots") or clinic.get("default_slots") or ["10:00 AM", "11:30 AM", "02:00 PM", "04:30 PM"]
+            # Fallback for old/empty data
+            slots = clinic.get("default_slots") or ["09:00 AM", "10:00 AM", "11:00 AM", "12:00 PM"]
 
         user_sessions[key] = {
             "step": "select_slot",

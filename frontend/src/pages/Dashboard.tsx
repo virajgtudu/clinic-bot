@@ -17,7 +17,8 @@ import {
   Activity,
   Stethoscope,
   LogOut,
-  Loader2
+  Loader2,
+  ChevronRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -37,6 +38,7 @@ import { supabase } from '../lib/supabase';
 import { RemindersView } from '../components/RemindersView';
 import { FollowUpModal } from '../components/FollowUpModal';
 import { useReminders } from '../hooks/useReminders';
+import { DoctorAvailabilityManager } from '../components/DoctorAvailabilityManager';
 
 const busiestHoursData = [
   { name: '9am', value: 40 },
@@ -49,7 +51,7 @@ const busiestHoursData = [
   { name: '4pm', value: 40 },
 ];
 
-type DashboardView = 'queue' | 'appointments' | 'patients' | 'reminders' | 'analytics' | 'settings';
+type DashboardView = 'queue' | 'appointments' | 'patients' | 'reminders' | 'analytics' | 'settings' | 'doctor_availability';
 
 export default function Dashboard() {
   const { queue, loading, markCompleted, callNext, prioritize, addWalkIn } = useQueue();
@@ -452,7 +454,8 @@ export default function Dashboard() {
           {activeView === 'appointments' && <AppointmentsView />}
           {activeView === 'patients' && <PatientsView />}
           {activeView === 'analytics' && <AnalyticsView />}
-          {activeView === 'settings' && <ClinicSettings />}
+          {activeView === 'settings' && <ClinicSettings onManageAvailability={() => setActiveView('doctor_availability')} />}
+          {activeView === 'doctor_availability' && <DoctorAvailabilityManager />}
 
           {activeView === 'reminders' && <RemindersView />}
         </div>
@@ -825,7 +828,7 @@ function AnalyticsView() {
   );
 }
 
-function ClinicSettings() {
+function ClinicSettings({ onManageAvailability }: { onManageAvailability: () => void }) {
   const { profile } = useAuth();
   const [clinicName, setClinicName] = useState(profile?.full_name || '');
   const [isUpdating, setIsUpdating] = useState(false);
@@ -835,9 +838,7 @@ function ClinicSettings() {
     if (!clinicName || !profile?.clinic_id) return;
     setIsUpdating(true);
     try {
-      // 1. Update clinic record
       await supabase.from('clinics').update({ name: clinicName }).eq('id', profile.clinic_id);
-      // 2. Update profile record
       await supabase.from('profiles').update({ full_name: clinicName }).eq('id', profile.id);
       window.location.reload();
     } catch (err) {
@@ -849,29 +850,49 @@ function ClinicSettings() {
   };
 
   return (
-    <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="bg-white dark:bg-slate-900 p-10 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-xl max-w-2xl">
-        <h2 className="text-2xl font-black dark:text-white mb-2">Clinic Information</h2>
-        <p className="text-xs text-slate-500 font-medium mb-8">Update your clinic identity shown to patients and on dashboard</p>
-        
-        <form onSubmit={handleUpdateClinic} className="space-y-6">
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Clinic Display Name</label>
-            <input 
-              type="text" 
-              value={clinicName} 
-              onChange={e => setClinicName(e.target.value)} 
-              className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-transparent focus:border-brand-500/30 focus:bg-white dark:focus:bg-slate-900 rounded-2xl text-sm font-bold transition-all outline-none dark:text-white"
-            />
+    <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-4xl">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* Profile Card */}
+        <div className="bg-white dark:bg-slate-900 p-10 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-xl">
+          <h2 className="text-2xl font-black dark:text-white mb-2 tracking-tight">Clinic Profile</h2>
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-8">Identity & Branding</p>
+          
+          <form onSubmit={handleUpdateClinic} className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Clinic Display Name</label>
+              <input 
+                type="text" 
+                value={clinicName} 
+                onChange={e => setClinicName(e.target.value)} 
+                className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-brand-500/20 transition-all outline-none dark:text-white"
+              />
+            </div>
+            <button 
+              type="submit" 
+              disabled={isUpdating}
+              className="w-full py-4 bg-brand-500 text-white font-black rounded-2xl hover:bg-brand-600 transition-all shadow-lg shadow-brand-500/25 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
+            >
+              {isUpdating ? <Loader2 className="animate-spin" size={20} /> : 'Update Identity'}
+            </button>
+          </form>
+        </div>
+
+        {/* Availability Entry Point */}
+        <button 
+          onClick={onManageAvailability}
+          className="bg-gradient-to-br from-brand-600 to-brand-700 p-10 rounded-[3rem] text-white shadow-xl shadow-brand-500/20 text-left relative overflow-hidden group hover:scale-[1.02] transition-all"
+        >
+          <Calendar className="absolute -right-10 -bottom-10 w-48 h-48 text-white/10 group-hover:rotate-12 transition-transform duration-700" />
+          <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center mb-8">
+            <Clock size={32} />
           </div>
-          <button 
-            type="submit" 
-            disabled={isUpdating}
-            className="px-8 py-4 bg-brand-500 text-white font-black rounded-2xl hover:bg-brand-600 transition-all shadow-lg shadow-brand-500/25 flex items-center gap-2 active:scale-95 disabled:opacity-50"
-          >
-            {isUpdating ? <Loader2 className="animate-spin" size={20} /> : 'Update Clinic Profile'}
-          </button>
-        </form>
+          <h3 className="text-2xl font-black tracking-tight mb-2 uppercase">Doctor Availability</h3>
+          <p className="text-brand-100 text-xs font-medium max-w-[200px] leading-relaxed mb-6">Manage weekly sessions, off-days, and consultation timings.</p>
+          
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-white text-brand-600 rounded-xl font-black text-[10px] uppercase tracking-widest">
+            Configure Now <ChevronRight size={14} />
+          </div>
+        </button>
       </div>
 
       <DoctorSettings />
