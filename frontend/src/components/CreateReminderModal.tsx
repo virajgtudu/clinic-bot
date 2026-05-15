@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
-import { X, Pill, FileText, Calendar, Clock } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Pill, FileText, Calendar, Clock, Search, User, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '../lib/utils';
+import { supabase } from '../lib/supabase';
+import { useAuth } from './AuthContext';
 
 interface CreateReminderModalProps {
   isOpen: boolean;
@@ -10,7 +12,11 @@ interface CreateReminderModalProps {
 }
 
 export function CreateReminderModal({ isOpen, onClose, onSubmit }: CreateReminderModalProps) {
+  const { profile } = useAuth();
   const [type, setType] = useState<'medication' | 'test' | 'follow_up'>('medication');
+  const [patientIdInput, setPatientIdInput] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  
   const [formData, setFormData] = useState({
     patient_name: '',
     patient_phone: '',
@@ -21,6 +27,38 @@ export function CreateReminderModal({ isOpen, onClose, onSubmit }: CreateReminde
     times: ['09:00']
   });
   const [submitting, setSubmitting] = useState(false);
+
+  // Auto-lookup patient by ID
+  useEffect(() => {
+    const lookupPatient = async () => {
+      if (patientIdInput.length < 4 || !profile?.clinic_id) return;
+      
+      setIsSearching(true);
+      try {
+        const { data, error } = await supabase
+          .from('patients')
+          .select('name, phone')
+          .eq('clinic_id', profile.clinic_id)
+          .eq('patient_id_serial', patientIdInput.toUpperCase().trim())
+          .maybeSingle();
+
+        if (data && !error) {
+          setFormData(prev => ({
+            ...prev,
+            patient_name: data.name,
+            patient_phone: data.phone
+          }));
+        }
+      } catch (err) {
+        console.error('Patient lookup failed:', err);
+      } finally {
+        setIsSearching(false);
+      }
+    };
+
+    const timer = setTimeout(lookupPatient, 500);
+    return () => clearTimeout(timer);
+  }, [patientIdInput, profile?.clinic_id]);
 
   if (!isOpen) return null;
 
@@ -106,28 +144,57 @@ export function CreateReminderModal({ isOpen, onClose, onSubmit }: CreateReminde
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Patient Selection */}
+          <div className="space-y-4">
             <div className="space-y-2">
-              <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Patient Name</label>
-              <input 
-                required
-                type="text" 
-                placeholder="Full Name"
-                className="w-full px-6 py-4 bg-slate-100/50 dark:bg-slate-800/50 border-none rounded-2xl focus:ring-2 focus:ring-brand-500/20 dark:text-white font-bold"
-                value={formData.patient_name}
-                onChange={e => setFormData({ ...formData, patient_name: e.target.value })}
-              />
+              <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
+                <User size={14} />
+                Patient ID (Optional)
+              </label>
+              <div className="relative group">
+                <Search className={cn(
+                  "absolute left-4 top-1/2 -translate-y-1/2 transition-colors",
+                  isSearching ? "text-brand-500" : "text-slate-400 group-focus-within:text-brand-500"
+                )} size={20} />
+                <input 
+                  type="text" 
+                  placeholder="e.g. PID-1001"
+                  className="w-full pl-12 pr-12 py-4 bg-slate-100/50 dark:bg-slate-800/50 border-none rounded-2xl focus:ring-2 focus:ring-brand-500/20 dark:text-white font-bold uppercase"
+                  value={patientIdInput}
+                  onChange={e => setPatientIdInput(e.target.value)}
+                />
+                {isSearching && (
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                    <Loader2 className="animate-spin text-brand-500" size={20} />
+                  </div>
+                )}
+              </div>
+              <p className="text-[10px] text-slate-400 font-bold ml-1">Enter ID to automatically fetch patient details.</p>
             </div>
-            <div className="space-y-2">
-              <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Phone Number</label>
-              <input 
-                required
-                type="tel" 
-                placeholder="91XXXXXXXXXX"
-                className="w-full px-6 py-4 bg-slate-100/50 dark:bg-slate-800/50 border-none rounded-2xl focus:ring-2 focus:ring-brand-500/20 dark:text-white font-bold"
-                value={formData.patient_phone}
-                onChange={e => setFormData({ ...formData, patient_phone: e.target.value })}
-              />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Patient Name</label>
+                <input 
+                  required
+                  type="text" 
+                  placeholder="Full Name"
+                  className="w-full px-6 py-4 bg-slate-100/50 dark:bg-slate-800/50 border-none rounded-2xl focus:ring-2 focus:ring-brand-500/20 dark:text-white font-bold"
+                  value={formData.patient_name}
+                  onChange={e => setFormData({ ...formData, patient_name: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Phone Number</label>
+                <input 
+                  required
+                  type="tel" 
+                  placeholder="91XXXXXXXXXX"
+                  className="w-full px-6 py-4 bg-slate-100/50 dark:bg-slate-800/50 border-none rounded-2xl focus:ring-2 focus:ring-brand-500/20 dark:text-white font-bold"
+                  value={formData.patient_phone}
+                  onChange={e => setFormData({ ...formData, patient_phone: e.target.value })}
+                />
+              </div>
             </div>
           </div>
 
