@@ -89,13 +89,14 @@ def _clinic_name(clinic):
 
 
 def _doctor_rows(doctors):
+    # Limit to 10 doctors for WhatsApp List Message compatibility
     return [
         {
             "id": f"doc_{index}",
             "title": doctor["name"][:24],
             "description": doctor.get("specialty", "")[:72],
         }
-        for index, doctor in enumerate(doctors)
+        for index, doctor in enumerate(doctors[:10])
     ]
 
 
@@ -220,7 +221,7 @@ BANNED_WORDS = ["gym", "water", "meeting", "study"]
 
 
 def _has_active_prescription_session(clinic, phone):
-    """Check if the patient has 'Completed' bookings in the last 48 hours and return unique names."""
+    """Check if the patient has 'Completed' bookings in the last 48 hours and return unique names (max 10)."""
     try:
         db = get_db()
         if not db:
@@ -231,18 +232,26 @@ def _has_active_prescription_session(clinic, phone):
         now = get_now()
         since = (now - timedelta(hours=48)).strftime("%Y-%m-%d %H:%M:%S")
 
-        # Query Supabase appointments table
+        # Query Supabase appointments table, ordered by recency
         response = db.table("appointments") \
-            .select("patient_name") \
+            .select("patient_name, created_at") \
             .eq("clinic_id", clinic_id) \
             .eq("phone", normalized_phone) \
             .eq("status", "Completed") \
             .gte("created_at", since) \
+            .order("created_at", desc=True) \
             .execute()
         
         if response.data:
-            # Return unique patient names
-            return list(set(r["patient_name"] for r in response.data))
+            # Return unique patient names, capped at 10 to avoid WhatsApp row limits
+            names = []
+            for r in response.data:
+                name = r["patient_name"]
+                if name and name not in names:
+                    names.append(name)
+                if len(names) >= 10:
+                    break
+            return names
             
     except Exception as exc:
         logger.error("Error checking prescription session via Supabase: %s", exc)
@@ -267,6 +276,8 @@ def _has_active_prescription_session(clinic, phone):
                             name = row.get("Name")
                             if name and name not in completed_patients:
                                 completed_patients.append(name)
+                            if len(completed_patients) >= 10:
+                                break
                     except ValueError:
                         continue
             return completed_patients
