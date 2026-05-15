@@ -82,25 +82,34 @@ export function useReminders() {
   };
 
   useEffect(() => {
-    fetchReminders();
+    let isMounted = true;
+    let channel: any = null;
     
-    if (!profile?.clinic_id) return;
+    if (profile?.clinic_id) {
+      fetchReminders();
 
-    const subscription = supabase
-      .channel('reminders_changes')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'reminders',
-        filter: `clinic_id=eq.${profile.clinic_id}`
-      }, () => {
-        fetchReminders();
-      })
-      .subscribe();
+      const channelName = `reminders_${profile.clinic_id}`;
+      channel = supabase
+        .channel(channelName)
+        .on('postgres_changes', { 
+          event: '*', 
+          schema: 'public', 
+          table: 'reminders',
+          filter: `clinic_id=eq.${profile.clinic_id}`
+        }, () => {
+          if (isMounted) fetchReminders();
+        })
+        .subscribe();
 
-    return () => {
-      subscription.unsubscribe();
-    };
+      return () => {
+        isMounted = false;
+        if (channel) supabase.removeChannel(channel);
+      };
+    } else {
+      setLoading(false);
+    }
+
+    return () => { isMounted = false; };
   }, [profile?.clinic_id]);
 
   const addReminder = async (data: Omit<Reminder, 'id' | 'clinic_id' | 'status' | 'created_at'>) => {

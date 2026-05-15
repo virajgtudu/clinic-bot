@@ -6,6 +6,7 @@ export interface Patient {
   id: string;
   token: string | number;
   name: string;
+  phone: string;
   status: 'waiting' | 'serving' | 'emergency' | 'completed' | 'cancelled';
   source: 'whatsapp' | 'walk-in';
   wait_time_mins: number;
@@ -55,6 +56,7 @@ export function useQueue() {
           id: appt.id,
           token: appt.token,
           name: appt.patient_name || 'Unknown Patient',
+          phone: appt.phone || '',
           status: dbStatus === 'pending' ? 'waiting' : dbStatus as any,
           source: appt.source === 'walkin' ? 'walk-in' : 'whatsapp',
           wait_time_mins: calculateWaitTime(appt.created_at),

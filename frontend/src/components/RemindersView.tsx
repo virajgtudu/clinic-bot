@@ -18,14 +18,17 @@ import type { Reminder } from '../hooks/useReminders';
 import { CreateReminderModal } from './CreateReminderModal';
 
 export function RemindersView() {
-  const { reminders, analytics, loading, cancelReminder, addReminder, updateReminderStatus } = useReminders();
+  const { reminders = [], analytics, loading, cancelReminder, addReminder, updateReminderStatus } = useReminders();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [filter, setFilter] = useState<'all' | 'medication' | 'test' | 'follow_up' | 'today_follow_up'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
 
-  const filteredReminders = reminders.filter(r => {
+  // Ensure reminders is always an array before filtering
+  const safeReminders = Array.isArray(reminders) ? reminders : [];
+
+  const filteredReminders = safeReminders.filter(r => {
     if (!r) return false;
     if (filter === 'today_follow_up') {
       return r.type === 'follow_up' && r.start_date === todayStr && (r.status === 'Active' || r.status === 'Missed');
@@ -39,13 +42,23 @@ export function RemindersView() {
   });
 
   const handleManualRemind = async (reminder: Reminder) => {
+    if (!reminder) return;
     try {
-      // In a real SaaS, this would call a backend trigger endpoint.
-      alert(`Manual reminder triggered for ${reminder.patient_name} via WhatsApp.`);
+      alert(`Manual reminder triggered for ${reminder.patient_name || 'Patient'} via WhatsApp.`);
     } catch (err) {
       console.error(err);
     }
   };
+
+  // If loading and no data, show spinner
+  if (loading && safeReminders.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center p-20 animate-in fade-in duration-700">
+        <div className="w-12 h-12 border-4 border-brand-500/20 border-t-brand-500 rounded-full animate-spin mb-4" />
+        <p className="text-slate-500 font-bold">Synchronizing reminders...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
@@ -69,28 +82,28 @@ export function RemindersView() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <AnalyticsCard 
           label="Active Medications" 
-          value={analytics.medicationCount} 
+          value={analytics?.medicationCount || 0} 
           icon={<Pill size={24} />} 
           color="blue"
           trend="+12%"
         />
         <AnalyticsCard 
           label="Upcoming Tests" 
-          value={analytics.testCount} 
+          value={analytics?.testCount || 0} 
           icon={<FileText size={24} />} 
           color="emerald"
           trend="+5%"
         />
         <AnalyticsCard 
           label="Follow-ups" 
-          value={analytics.followUpCount} 
+          value={analytics?.followUpCount || 0} 
           icon={<Calendar size={24} />} 
           color="purple"
           trend="0%"
         />
         <AnalyticsCard 
           label="Avg Compliance" 
-          value={`${analytics.complianceRate}%`} 
+          value={`${analytics?.complianceRate || 100}%`} 
           icon={<TrendingUp size={24} />} 
           color="orange"
           trend="+2.4%"

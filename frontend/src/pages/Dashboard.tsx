@@ -474,21 +474,31 @@ export default function Dashboard() {
         patientPhone={followUpPatient?.phone || ''}
         onSubmit={async (days) => {
           if (!followUpPatient) return;
+          
+          const phone = followUpPatient.phone || 'walk-in';
+          const name = followUpPatient.name || 'Unknown Patient';
+
           const start = new Date();
           start.setDate(start.getDate() + days);
           const dateStr = start.toISOString().split('T')[0];
           
-          await addReminder({
-            patient_name: followUpPatient.name,
-            patient_phone: followUpPatient.phone,
-            type: 'follow_up',
-            item_name: `General Follow-up (${days} days)`,
-            frequency: 'Once',
-            duration_days: 1,
-            start_date: dateStr,
-            end_date: dateStr,
-            times: ['08:00'],
-          });
+          try {
+            await addReminder({
+              patient_name: name,
+              patient_phone: phone,
+              type: 'follow_up',
+              item_name: `General Follow-up (${days} days)`,
+              frequency: 'Once',
+              duration_days: 1,
+              start_date: dateStr,
+              end_date: dateStr,
+              times: ['08:00'],
+            });
+            alert('Follow-up scheduled successfully.');
+          } catch (err) {
+            console.error('Failed to schedule follow-up:', err);
+            alert('Failed to schedule follow-up. Please ensure patient details are complete.');
+          }
         }}
       />
     </div>
