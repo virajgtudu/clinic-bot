@@ -22,25 +22,32 @@ export function RemindersView() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [filter, setFilter] = useState<'all' | 'medication' | 'test' | 'follow_up' | 'today_follow_up'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [renderError, setRenderError] = useState<string | null>(null);
 
   const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
 
   // Ensure reminders is always an array before filtering
   const safeReminders = Array.isArray(reminders) ? reminders : [];
 
-  const filteredReminders = safeReminders.filter(r => {
-    if (!r) return false;
-    if (filter === 'today_follow_up') {
-      return r.type === 'follow_up' && r.start_date === todayStr && (r.status === 'Active' || r.status === 'Missed');
-    }
-    const matchesFilter = filter === 'all' || r.type === filter;
-    const patientName = r.patient_name || '';
-    const itemName = r.item_name || '';
-    const matchesSearch = patientName.toLowerCase().includes(searchQuery.toLowerCase()) || 
+  // Defensive filtering logic
+  let filteredReminders: Reminder[] = [];
+  try {
+    filteredReminders = safeReminders.filter((r: Reminder) => {
+      if (!r) return false;
+      if (filter === 'today_follow_up') {
+        return r.type === 'follow_up' && r.start_date === todayStr && (r.status === 'Active' || r.status === 'Missed');
+      }
+      const matchesFilter = filter === 'all' || r.type === filter;
+      const patientName = r.patient_name || '';
+      const itemName = r.item_name || '';
+      const matchesSearch = patientName.toLowerCase().includes(searchQuery.toLowerCase()) || 
                          itemName.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesFilter && matchesSearch;
-  });
-
+      return matchesFilter && matchesSearch;
+    });
+  } catch (err: any) {
+    console.error('Filtering error:', err);
+    if (!renderError) setRenderError(err.message);
+  }
   const handleManualRemind = async (reminder: Reminder) => {
     if (!reminder) return;
     try {
@@ -50,8 +57,19 @@ export function RemindersView() {
     }
   };
 
+  if (renderError) {
+    return (
+      <div className="flex flex-col items-center justify-center p-20 bg-rose-50 dark:bg-rose-950/20 rounded-[3rem] border border-rose-100 dark:border-rose-900/30">
+        <AlertCircle size={48} className="text-rose-500 mb-4" />
+        <h3 className="text-xl font-black text-rose-900 dark:text-rose-400">Component Error</h3>
+        <p className="text-sm text-rose-600 dark:text-rose-500/70 font-medium mt-2">{renderError}</p>
+        <button onClick={() => window.location.reload()} className="mt-6 px-6 py-2 bg-rose-500 text-white font-bold rounded-xl active:scale-95">Reload Dashboard</button>
+      </div>
+    );
+  }
+
   // If loading and no data, show spinner
-  if (loading && safeReminders.length === 0) {
+  if (loading && (!reminders || reminders.length === 0)) {
     return (
       <div className="flex flex-col items-center justify-center p-20 animate-in fade-in duration-700">
         <div className="w-12 h-12 border-4 border-brand-500/20 border-t-brand-500 rounded-full animate-spin mb-4" />
@@ -123,7 +141,7 @@ export function RemindersView() {
               active={filter === 'today_follow_up'} 
               onClick={() => setFilter('today_follow_up')} 
               label="Today's Follow-ups" 
-              count={reminders.filter(r => r.type === 'follow_up' && r.start_date === todayStr && (r.status === 'Active' || r.status === 'Missed')).length}
+              count={safeReminders.filter((r: Reminder) => r?.type === 'follow_up' && r?.start_date === todayStr && (r?.status === 'Active' || r?.status === 'Missed')).length}
             />
           </div>
 
@@ -176,11 +194,11 @@ export function RemindersView() {
                     <td className="px-8 py-6">
                       <div className="flex items-center gap-4">
                         <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-black text-slate-500">
-                          {reminder.patient_name ? reminder.patient_name[0].toUpperCase() : '?'}
+                          {reminder.patient_name ? (reminder.patient_name[0] || '?').toUpperCase() : '?'}
                         </div>
                         <div>
-                          <div className="font-bold dark:text-white">{reminder.patient_name}</div>
-                          <div className="text-sm text-slate-500 font-medium">{reminder.patient_phone}</div>
+                          <div className="font-bold dark:text-white">{reminder.patient_name || 'Unknown Patient'}</div>
+                          <div className="text-sm text-slate-500 font-medium">{reminder.patient_phone || 'No Phone'}</div>
                         </div>
                       </div>
                     </td>
@@ -197,7 +215,7 @@ export function RemindersView() {
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2 text-sm font-bold dark:text-slate-300">
                           <Clock size={14} className="text-brand-500" />
-                          {reminder.frequency}
+                          {reminder.frequency || 'N/A'}
                         </div>
                         <div className="flex gap-1">
                           {(reminder.times || []).map((t, i) => (

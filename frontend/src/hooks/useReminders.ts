@@ -83,13 +83,16 @@ export function useReminders() {
 
   useEffect(() => {
     let isMounted = true;
-    let channel: any = null;
+    let subscription: any = null;
     
     if (profile?.clinic_id) {
       fetchReminders();
 
-      const channelName = `reminders_${profile.clinic_id}`;
-      channel = supabase
+      // Use a truly unique channel name to avoid collisions in React Strict Mode
+      const channelId = Math.random().toString(36).substring(7);
+      const channelName = `reminders_${profile.clinic_id}_${channelId}`;
+      
+      subscription = supabase
         .channel(channelName)
         .on('postgres_changes', { 
           event: '*', 
@@ -103,7 +106,9 @@ export function useReminders() {
 
       return () => {
         isMounted = false;
-        if (channel) supabase.removeChannel(channel);
+        if (subscription) {
+          subscription.unsubscribe();
+        }
       };
     } else {
       setLoading(false);
