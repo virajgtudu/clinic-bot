@@ -34,6 +34,7 @@ import { useWhatsAppStatus } from '../hooks/useWhatsAppStatus';
 import { useAuth } from '../components/AuthContext';
 import { WalkInModal } from '../components/WalkInModal';
 import { supabase } from '../lib/supabase';
+import { RemindersView } from '../components/RemindersView';
 
 const busiestHoursData = [
   { name: '9am', value: 40 },
@@ -442,18 +443,7 @@ export default function Dashboard() {
           {activeView === 'analytics' && <AnalyticsView />}
           {activeView === 'settings' && <ClinicSettings />}
 
-          {activeView === 'reminders' && (
-            <div className="flex flex-col items-center justify-center h-full text-center py-20">
-               <div className="w-24 h-24 bg-brand-50 dark:bg-brand-950/30 text-brand-500 rounded-3xl flex items-center justify-center mb-8">
-                  <Activity size={48} />
-               </div>
-               <h2 className="text-3xl font-black dark:text-white mb-4 uppercase tracking-tight">{activeView} module</h2>
-               <p className="text-slate-500 dark:text-slate-400 max-w-md font-medium">This module is coming soon in the next update. We are currently building these analytics for you.</p>
-               <button onClick={() => setActiveView('queue')} className="mt-10 px-8 py-4 bg-brand-500 text-white font-black rounded-2xl hover:bg-brand-600 transition-all shadow-lg shadow-brand-500/25">
-                 Back to Queue
-               </button>
-            </div>
-          )}
+          {activeView === 'reminders' && <RemindersView />}
         </div>
       </main>
 

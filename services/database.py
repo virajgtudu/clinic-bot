@@ -101,3 +101,126 @@ def get_doctors(clinic_id):
     except Exception as e:
         logger.error(f"Supabase fetch doctors error: {e}")
         return []
+
+# --- Reminders Module ---
+
+def create_reminder(data):
+    """Create a new medication, test, or follow-up reminder."""
+    db = get_db()
+    if not db:
+        return None
+    try:
+        response = db.table("reminders").insert(data).execute()
+        return response.data[0] if response.data else None
+    except Exception as e:
+        logger.error(f"Supabase create reminder error: {e}")
+        return None
+
+def get_active_reminders(clinic_id, reminder_type=None):
+    """Fetch all active reminders for a clinic, optionally filtered by type."""
+    db = get_db()
+    if not db:
+        return []
+    try:
+        query = db.table("reminders") \
+            .select("*") \
+            .eq("clinic_id", clinic_id) \
+            .eq("status", "Active")
+        
+        if reminder_type:
+            query = query.eq("type", reminder_type)
+            
+        response = query.order("created_at", desc=True).execute()
+        return response.data
+    except Exception as e:
+        logger.error(f"Supabase fetch active reminders error: {e}")
+        return []
+
+def update_reminder_status(reminder_id, status):
+    """Update reminder status (Active, Cancelled, Completed)."""
+    db = get_db()
+    if not db:
+        return False
+    try:
+        db.table("reminders").update({"status": status}).eq("id", reminder_id).execute()
+        return True
+    except Exception as e:
+        logger.error(f"Supabase update reminder status error: {e}")
+        return False
+
+def log_reminder_compliance(reminder_id, status, clinic_id):
+    """Log if a patient took or skipped a medication dose."""
+    db = get_db()
+    if not db:
+        return False
+    try:
+        db.table("reminder_logs").insert({
+            "reminder_id": reminder_id,
+            "status": status,
+            "clinic_id": clinic_id
+        }).execute()
+        return True
+    except Exception as e:
+        logger.error(f"Supabase log compliance error: {e}")
+        return False
+
+def log_compliance_by_phone(phone, status, clinic_id):
+    """Log compliance for the most recent active reminder for a phone number."""
+    db = get_db()
+    if not db:
+        return False
+    try:
+        # Find latest active medication reminder for this phone
+        res = db.table("reminders") \
+            .select("id") \
+            .eq("patient_phone", phone) \
+            .eq("clinic_id", clinic_id) \
+            .eq("type", "medication") \
+            .eq("status", "Active") \
+            .order("created_at", desc=True) \
+            .limit(1) \
+            .execute()
+            
+        if res.data:
+            return log_reminder_compliance(res.data[0]["id"], status, clinic_id)
+        return False
+    except Exception as e:
+        logger.error(f"Supabase log compliance by phone error: {e}")
+        return False
+
+def get_reminder_analytics(clinic_id):
+    """Fetch analytics data for the reminders module."""
+    db = get_db()
+    if not db:
+        return {}
+    try:
+        # 1. Total active by type
+        active_res = db.table("reminders") \
+            .select("type, status") \
+            .eq("clinic_id", clinic_id) \
+            .eq("status", "Active") \
+            .execute()
+        
+        counts = {"medication": 0, "test": 0, "follow_up": 0}
+        for r in active_res.data:
+            counts[r["type"]] += 1
+            
+        # 2. Compliance rate (last 7 days)
+        # In a real app, this might be a more complex query or multiple RPC calls
+        log_res = db.table("reminder_logs") \
+            .select("status") \
+            .eq("clinic_id", clinic_id) \
+            .execute()
+            
+        taken = sum(1 for l in log_res.data if l["status"] == "Taken")
+        total_logs = len(log_res.data)
+        compliance_rate = (taken / total_logs * 100) if total_logs > 0 else 100
+        
+        return {
+            "active_counts": counts,
+            "compliance_rate": round(compliance_rate, 1),
+            "total_active": len(active_res.data)
+        }
+    except Exception as e:
+        logger.error(f"Supabase reminder analytics error: {e}")
+        return {}

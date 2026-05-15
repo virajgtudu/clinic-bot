@@ -7,7 +7,7 @@ from pathlib import Path
 from services.calendar import create_calendar_event
 from services.sheets import MEDICINE_HEADERS, append_booking, append_medicine, append_test, append_followup, ensure_headers, open_sheet
 from services.whatsapp import send_buttons, send_list, send_text
-from services.database import create_appointment, get_queue_status, get_db, get_doctors
+from services.database import create_appointment, get_queue_status, get_db, get_doctors, create_reminder, log_compliance_by_phone
 from config import get_now
 
 
@@ -501,11 +501,21 @@ def _save_staff_reminder(clinic, session):
     patient_age = session.get("patient_age")
     full_name = f"{patient_name} ({patient_age})"
     patient_phone = session.get("patient_phone")
-    start_date = session.get("start_date")
-    end_date = session.get("end_date")
+    start_date = session.get("start_date") # DD-MM-YYYY
+    end_date = session.get("end_date") # DD-MM-YYYY
     frequency_label = session.get("frequency_label")
     reminder_times = session.get("reminder_times", [])
     duration_days = (datetime.strptime(end_date, "%d-%m-%Y") - datetime.strptime(start_date, "%d-%m-%Y")).days + 1
+
+    clinic_id = clinic["phone_number_id"]
+
+    # Convert dates for Supabase (YYYY-MM-DD)
+    try:
+        db_start_date = datetime.strptime(start_date, "%d-%m-%Y").strftime("%Y-%m-%d")
+        db_end_date = datetime.strptime(end_date, "%d-%m-%Y").strftime("%Y-%m-%d")
+    except:
+        db_start_date = now.strftime("%Y-%m-%d")
+        db_end_date = now.strftime("%Y-%m-%d")
 
     instruction_lines = [
         f"Patient: {full_name}",
@@ -514,26 +524,44 @@ def _save_staff_reminder(clinic, session):
     ]
     
     # Save Medicines
-    append_medicine(
-        clinic,
-        [
-            patient_phone,                  # Col 2: Phone
-            ", ".join(medicines),           # Col 3: Medicine
-            "Staff configured",             # Col 4: Dosage
-            frequency_label,                # Col 5: Frequency
-            duration_days,                  # Col 6: Duration
-            start_date,                     # Col 7: Start Date
-            end_date,                       # Col 8: End Date
-            "\n".join(instruction_lines),   # Col 9: Instructions
-            "Active",                       # Col 10: Status
-            now.strftime("%d-%m-%Y %H:%M"),  # Col 11: Created At
-            "StaffPlan",                    # Col 12: Type
-            reminder_times[0] if len(reminder_times) > 0 else "09:00", # Col 13: Time 1
-            reminder_times[1] if len(reminder_times) > 1 else "",      # Col 14: Time 2
-            reminder_times[2] if len(reminder_times) > 2 else "",      # Col 15: Time 3
-            ""                              # Col 16: Appointment ID
-        ],
-    )
+    if medicines:
+        medicine_str = ", ".join(medicines)
+        append_medicine(
+            clinic,
+            [
+                patient_phone,                  # Col 2: Phone
+                medicine_str,                   # Col 3: Medicine
+                "Staff configured",             # Col 4: Dosage
+                frequency_label,                # Col 5: Frequency
+                duration_days,                  # Col 6: Duration
+                start_date,                     # Col 7: Start Date
+                end_date,                       # Col 8: End Date
+                "\n".join(instruction_lines),   # Col 9: Instructions
+                "Active",                       # Col 10: Status
+                now.strftime("%d-%m-%Y %H:%M"),  # Col 11: Created At
+                "StaffPlan",                    # Col 12: Type
+                reminder_times[0] if len(reminder_times) > 0 else "09:00", # Col 13: Time 1
+                reminder_times[1] if len(reminder_times) > 1 else "",      # Col 14: Time 2
+                reminder_times[2] if len(reminder_times) > 2 else "",      # Col 15: Time 3
+                ""                              # Col 16: Appointment ID
+            ],
+        )
+
+        # Supabase Medication Reminder
+        create_reminder({
+            "clinic_id": clinic_id,
+            "patient_name": patient_name,
+            "patient_phone": patient_phone,
+            "type": "medication",
+            "item_name": medicine_str,
+            "frequency": frequency_label,
+            "duration_days": duration_days,
+            "start_date": db_start_date,
+            "end_date": db_end_date,
+            "times": reminder_times,
+            "status": "Active",
+            "metadata": {"source": "whatsapp_staff", "age": patient_age}
+        })
     
     # Save Tests
     for test_name in tests:
@@ -548,6 +576,18 @@ def _save_staff_reminder(clinic, session):
                 now.strftime("%d-%m-%Y %H:%M")
             ]
         )
+
+        # Supabase Test Reminder
+        create_reminder({
+            "clinic_id": clinic_id,
+            "patient_name": patient_name,
+            "patient_phone": patient_phone,
+            "type": "test",
+            "item_name": test_name,
+            "start_date": db_start_date,
+            "status": "Active",
+            "metadata": {"source": "whatsapp_staff", "age": patient_age}
+        })
 
 
 def _load_active_staff_reminders(clinic):
@@ -934,10 +974,12 @@ def handle_message(clinic, message):
         return
     
     if text in {"med_taken", "1"}:
+        log_compliance_by_phone(phone, "Taken", clinic_id)
         send_text(clinic, phone, "✅ Great! Medicine taken. We will remind you for the next dose.")
         return
 
     if text in {"med_skip", "2"}:
+        log_compliance_by_phone(phone, "Skipped", clinic_id)
         send_text(clinic, phone, "⏭️ Medicine skipped. Please try to take it on time if possible. We will remind you for the next dose.")
         return
 

@@ -1,0 +1,289 @@
+import React, { useState } from 'react';
+import { 
+  Plus, 
+  Search, 
+  Filter, 
+  Pill, 
+  FileText, 
+  Calendar, 
+  MoreVertical, 
+  Trash2, 
+  CheckCircle2, 
+  Clock,
+  Activity,
+  ChevronRight,
+  TrendingUp,
+  AlertCircle
+} from 'lucide-react';
+import { motion } from 'framer-motion';
+import { cn } from '../lib/utils';
+import { useReminders, Reminder } from '../hooks/useReminders';
+import { CreateReminderModal } from './CreateReminderModal';
+
+export function RemindersView() {
+  const { reminders, analytics, loading, cancelReminder, addReminder } = useReminders();
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'medication' | 'test' | 'follow_up'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredReminders = reminders.filter(r => {
+    const matchesFilter = filter === 'all' || r.type === filter;
+    const matchesSearch = r.patient_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                         r.item_name.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesFilter && matchesSearch;
+  });
+
+  return (
+    <div className="space-y-8 animate-in fade-in duration-700">
+      {/* Header & Actions */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <h2 className="text-3xl font-black dark:text-white tracking-tight">PATIENT REMINDERS</h2>
+          <p className="text-slate-500 dark:text-slate-400 font-medium mt-1">Manage automated medication, test, and follow-up alerts.</p>
+        </div>
+        
+        <button 
+          onClick={() => setIsModalOpen(true)}
+          className="flex items-center justify-center gap-2 bg-brand-500 hover:bg-brand-600 text-white px-6 py-4 rounded-2xl font-black transition-all shadow-lg shadow-brand-500/25 active:scale-95"
+        >
+          <Plus size={20} strokeWidth={3} />
+          <span>CREATE REMINDER</span>
+        </button>
+      </div>
+
+      {/* Analytics Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <AnalyticsCard 
+          label="Active Medications" 
+          value={analytics.medicationCount} 
+          icon={<Pill size={24} />} 
+          color="blue"
+          trend="+12%"
+        />
+        <AnalyticsCard 
+          label="Upcoming Tests" 
+          value={analytics.testCount} 
+          icon={<FileText size={24} />} 
+          color="emerald"
+          trend="+5%"
+        />
+        <AnalyticsCard 
+          label="Follow-ups" 
+          value={analytics.followUpCount} 
+          icon={<Calendar size={24} />} 
+          color="purple"
+          trend="0%"
+        />
+        <AnalyticsCard 
+          label="Avg Compliance" 
+          value={`${analytics.complianceRate}%`} 
+          icon={<TrendingUp size={24} />} 
+          color="orange"
+          trend="+2.4%"
+        />
+      </div>
+
+      {/* Filters & Table */}
+      <div className="bg-white dark:bg-slate-900/50 backdrop-blur-xl border border-slate-200/60 dark:border-slate-800/60 rounded-[2.5rem] overflow-hidden shadow-sm">
+        <div className="p-8 border-b border-slate-200/60 dark:border-slate-800/60 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          <div className="flex items-center gap-2 bg-slate-100/50 dark:bg-slate-800/50 p-1.5 rounded-2xl w-fit">
+            <FilterButton active={filter === 'all'} onClick={() => setFilter('all')} label="All" />
+            <FilterButton active={filter === 'medication'} onClick={() => setFilter('medication')} label="Medications" />
+            <FilterButton active={filter === 'test'} onClick={() => setFilter('test')} label="Tests" />
+            <FilterButton active={filter === 'follow_up'} onClick={() => setFilter('follow_up')} label="Follow-ups" />
+          </div>
+
+          <div className="relative group min-w-[300px]">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-500 transition-colors" size={20} />
+            <input 
+              type="text" 
+              placeholder="Search patient or item..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-12 pr-6 py-3.5 bg-slate-100/50 dark:bg-slate-800/50 border-none rounded-2xl focus:ring-2 focus:ring-brand-500/20 dark:text-white placeholder:text-slate-400 font-medium transition-all"
+            />
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-slate-100 dark:border-slate-800/50">
+                <th className="px-8 py-5 text-sm font-bold text-slate-400 uppercase tracking-wider">Patient</th>
+                <th className="px-8 py-5 text-sm font-bold text-slate-400 uppercase tracking-wider">Type & Item</th>
+                <th className="px-8 py-5 text-sm font-bold text-slate-400 uppercase tracking-wider">Schedule</th>
+                <th className="px-8 py-5 text-sm font-bold text-slate-400 uppercase tracking-wider">Duration</th>
+                <th className="px-8 py-5 text-sm font-bold text-slate-400 uppercase tracking-wider">Status</th>
+                <th className="px-8 py-5 text-sm font-bold text-slate-400 uppercase tracking-wider"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="px-8 py-20 text-center">
+                    <div className="flex flex-col items-center gap-4">
+                      <div className="w-12 h-12 border-4 border-brand-500/20 border-t-brand-500 rounded-full animate-spin" />
+                      <p className="text-slate-500 font-medium">Loading reminders...</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredReminders.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-8 py-20 text-center">
+                    <div className="flex flex-col items-center gap-4 opacity-40">
+                      <Activity size={48} />
+                      <p className="text-xl font-bold">No reminders found</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredReminders.map((reminder) => (
+                  <tr key={reminder.id} className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors">
+                    <td className="px-8 py-6">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-black text-slate-500">
+                          {reminder.patient_name[0].toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="font-bold dark:text-white">{reminder.patient_name}</div>
+                          <div className="text-sm text-slate-500 font-medium">{reminder.patient_phone}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-8 py-6">
+                      <div className="flex items-center gap-3">
+                        <ReminderIcon type={reminder.type} />
+                        <div>
+                          <div className="font-bold dark:text-white">{reminder.item_name}</div>
+                          <div className="text-xs text-slate-400 font-bold uppercase tracking-tight">{reminder.type}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-8 py-6">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2 text-sm font-bold dark:text-slate-300">
+                          <Clock size={14} className="text-brand-500" />
+                          {reminder.frequency}
+                        </div>
+                        <div className="flex gap-1">
+                          {reminder.times.map((t, i) => (
+                            <span key={i} className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-md font-bold text-slate-500">
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-8 py-6">
+                      <div className="text-sm font-bold dark:text-slate-300">{reminder.duration_days} Days</div>
+                      <div className="text-xs text-slate-400 font-medium">{reminder.start_date} → {reminder.end_date}</div>
+                    </td>
+                    <td className="px-8 py-6">
+                      <StatusBadge status={reminder.status} />
+                    </td>
+                    <td className="px-8 py-6 text-right">
+                      <button 
+                        onClick={() => {
+                          if (confirm('Cancel this reminder?')) cancelReminder(reminder.id);
+                        }}
+                        className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-all"
+                      >
+                        <Trash2 size={20} />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <CreateReminderModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        onSubmit={addReminder}
+      />
+    </div>
+  );
+}
+
+function AnalyticsCard({ label, value, icon, color, trend }: { label: string, value: string | number, icon: React.ReactNode, color: string, trend: string }) {
+  const colors: Record<string, string> = {
+    blue: 'text-blue-500 bg-blue-50 dark:bg-blue-500/10',
+    emerald: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10',
+    purple: 'text-purple-500 bg-purple-50 dark:bg-purple-500/10',
+    orange: 'text-orange-500 bg-orange-50 dark:bg-orange-500/10',
+  };
+
+  return (
+    <div className="bg-white dark:bg-slate-900/50 backdrop-blur-xl border border-slate-200/60 dark:border-slate-800/60 p-8 rounded-[2rem] shadow-sm hover:scale-[1.02] transition-transform duration-300">
+      <div className="flex items-center justify-between mb-6">
+        <div className={cn("p-4 rounded-2xl", colors[color])}>
+          {icon}
+        </div>
+        <div className="flex items-center gap-1 text-emerald-500 font-black text-sm bg-emerald-500/10 px-2 py-1 rounded-lg">
+          <TrendingUp size={14} />
+          {trend}
+        </div>
+      </div>
+      <div>
+        <div className="text-4xl font-black dark:text-white mb-1">{value}</div>
+        <div className="text-slate-500 dark:text-slate-400 font-bold text-sm uppercase tracking-wider">{label}</div>
+      </div>
+    </div>
+  );
+}
+
+function FilterButton({ active, onClick, label }: { active: boolean, onClick: () => void, label: string }) {
+  return (
+    <button 
+      onClick={onClick}
+      className={cn(
+        "px-6 py-2.5 rounded-xl font-black text-sm transition-all",
+        active 
+          ? "bg-white dark:bg-slate-700 text-brand-500 shadow-sm" 
+          : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
+function ReminderIcon({ type }: { type: Reminder['type'] }) {
+  const icons = {
+    medication: <Pill size={18} className="text-blue-500" />,
+    test: <FileText size={18} className="text-emerald-500" />,
+    follow_up: <Calendar size={18} className="text-purple-500" />
+  };
+  
+  const bgColors = {
+    medication: 'bg-blue-50 dark:bg-blue-500/10',
+    test: 'bg-emerald-50 dark:bg-emerald-500/10',
+    follow_up: 'bg-purple-50 dark:bg-purple-500/10'
+  };
+
+  return (
+    <div className={cn("p-2.5 rounded-xl", bgColors[type])}>
+      {icons[type]}
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: Reminder['status'] }) {
+  const configs = {
+    Active: { color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10', icon: <Activity size={12} /> },
+    Cancelled: { color: 'text-slate-400 bg-slate-50 dark:bg-slate-800', icon: <AlertCircle size={12} /> },
+    Completed: { color: 'text-blue-500 bg-blue-50 dark:bg-blue-500/10', icon: <CheckCircle2 size={12} /> }
+  };
+
+  const config = configs[status];
+
+  return (
+    <div className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black uppercase tracking-wider w-fit", config.color)}>
+      {config.icon}
+      {status}
+    </div>
+  );
+}

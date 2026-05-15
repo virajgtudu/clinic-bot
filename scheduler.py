@@ -9,33 +9,46 @@ sys.path.insert(0, str(Path(__file__).parent))
 from config import get_all_clinics, get_clinic, get_now
 from services.sheets import MEDICINE_HEADERS, TEST_HEADERS, ensure_headers, open_sheet
 from services.whatsapp import send_text, send_buttons
+from services.database import get_db
 
 
 def get_active_tests(clinic):
-    """Get all active test reminders for a clinic"""
-    test_sheet_name = f"{clinic.get('name', 'clinic').lower().replace(' ', '_')}_test"
+    """Get all active test reminders for a clinic from Supabase"""
+    db = get_db()
+    if not db:
+        return []
+        
+    clinic_id = clinic["phone_number_id"]
     try:
-        sheet = open_sheet(test_sheet_name)
-        ensure_headers(sheet, TEST_HEADERS)
-        records = sheet.get_all_records()
-
+        # Fetch active test reminders from Supabase
+        response = db.table("reminders") \
+            .select("*") \
+            .eq("clinic_id", clinic_id) \
+            .eq("type", "test") \
+            .eq("status", "Active") \
+            .execute()
+            
         now = get_now()
-        today = now.date()
-        tomorrow = today + timedelta(days=1)
+        today_str = now.strftime("%Y-%m-%d")
+        tomorrow_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
 
         active = []
-        for i, r in enumerate(records):
-            if r.get('Status') == 'Active':
-                try:
-                    test_date = datetime.strptime(str(r.get('Date')).replace("'", ""), "%d-%m-%Y").date()
-                    if test_date == today or test_date == tomorrow:
-                        r['_row_idx'] = i + 2 # 1-based, +1 for header
-                        r['_sheet_name'] = test_sheet_name
-                        active.append(r)
-                except: continue
+        for r in response.data:
+            start_date = r.get("start_date")
+            if start_date in [today_str, tomorrow_str]:
+                # Map Supabase fields to the format expected by the existing sender logic
+                active.append({
+                    "id": r["id"],
+                    "Phone": r["patient_phone"],
+                    "Test Name": r["item_name"],
+                    "Instructions": r.get("metadata", {}).get("instructions", "Follow prescribed precautions."),
+                    "Date": datetime.strptime(start_date, "%Y-%m-%d").strftime("%d-%m-%Y"),
+                    "Last Sent": r.get("metadata", {}).get("last_sent", ""),
+                    "source": "supabase"
+                })
         return active
     except Exception as e:
-        print(f"Error reading tests for {clinic.get('name')}: {e}")
+        print(f"Error reading tests for {clinic.get('name')} from Supabase: {e}")
         return []
 
 def send_test_reminders():
@@ -93,16 +106,24 @@ def send_test_reminders():
 
             if msg and send_whatsapp(clinic, phone, msg):
                 try:
-                    if not sheet:
-                        sheet = open_sheet(t['_sheet_name'])
-                    headers = sheet.row_values(1)
-                    if "Last Sent" in headers:
-                        col_idx = headers.index("Last Sent") + 1
-                        new_val = f"{type_sent} ({get_now().strftime('%d-%m-%Y %H:%M')})"
-                        sheet.update_cell(t['_row_idx'], col_idx, new_val)
+                    new_val = f"{type_sent} ({get_now().strftime('%d-%m-%Y %H:%M')})"
+                    if t.get("source") == "supabase":
+                        db = get_db()
+                        # Fetch current metadata
+                        res = db.table("reminders").select("metadata").eq("id", t["id"]).execute()
+                        meta = res.data[0]["metadata"] if res.data else {}
+                        meta["last_sent"] = new_val
+                        db.table("reminders").update({"metadata": meta}).eq("id", t["id"]).execute()
+                    else:
+                        if not sheet:
+                            sheet = open_sheet(t['_sheet_name'])
+                        headers = sheet.row_values(1)
+                        if "Last Sent" in headers:
+                            col_idx = headers.index("Last Sent") + 1
+                            sheet.update_cell(t['_row_idx'], col_idx, new_val)
                     print(f"      ✅ Sent {type_sent} reminder to {phone}")
                 except Exception as e:
-                    print(f"      ⚠️ Sent but failed to update sheet: {e}")
+                    print(f"      ⚠️ Sent but failed to update status: {e}")
 
 def send_whatsapp(clinic, phone, message, buttons=None):
     """Send WhatsApp message (text or interactive)"""
@@ -120,46 +141,44 @@ def send_whatsapp(clinic, phone, message, buttons=None):
         return False
 
 def get_active_medicines(clinic):
-    """Get all active medicine reminders for a clinic"""
-    if not clinic or not clinic.get("medicines_sheet"):
+    """Get all active medicine reminders for a clinic from Supabase"""
+    db = get_db()
+    if not db:
         return []
-    
-    sheet = open_sheet(clinic.get("medicines_sheet"), clinic.get("medicines_sheet_id"))
-    ensure_headers(sheet, MEDICINE_HEADERS)
-    
+        
+    clinic_id = clinic["phone_number_id"]
     try:
-        records = sheet.get_all_records()
+        # Fetch active medication reminders from Supabase
+        response = db.table("reminders") \
+            .select("*") \
+            .eq("clinic_id", clinic_id) \
+            .eq("type", "medication") \
+            .eq("status", "Active") \
+            .execute()
+            
+        now = get_now()
+        today = now.date()
         
         active = []
-        for i, r in enumerate(records):
-            if r.get('Status') == 'Active':
-                start = str(r.get('Start Date', '')).replace("'", "").strip()
-                end = str(r.get('End Date', '')).replace("'", "").strip()
-                
-                if start and end:
-                    try:
-                        # Handle both DD-MM-YYYY and potentially DD/MM/YYYY
-                        s_val = start.replace("/", "-")
-                        e_val = end.replace("/", "-")
-                        start_date = datetime.strptime(s_val, "%d-%m-%Y").date()
-                        end_date = datetime.strptime(e_val, "%d-%m-%Y").date()
-                        
-                        now = get_now()
-                        today = now.date()
-                        if start_date <= today <= end_date:
-                            r['_row_idx'] = i + 2
-                            r['_sheet_name'] = clinic.get("medicines_sheet")
-                            active.append(r)
-                        else:
-                            print(f"      - Skipping {r.get('Medicine')} for {r.get('Phone')}: Today ({today}) not in range {start_date} to {end_date}")
-                    except Exception as de:
-                        print(f"      ⚠️ Date parse error for {r.get('Medicine')} ({start} - {end}): {de}")
-                else:
-                    print(f"      - Skipping {r.get('Medicine')}: Missing start/end date")
-        
+        for r in response.data:
+            start_date = datetime.strptime(r["start_date"], "%Y-%m-%d").date()
+            end_date = datetime.strptime(r["end_date"], "%Y-%m-%d").date() if r.get("end_date") else today
+            
+            if start_date <= today <= end_date:
+                # Map to format expected by existing logic
+                active.append({
+                    "id": r["id"],
+                    "Phone": r["patient_phone"],
+                    "Medicine": r["item_name"],
+                    "Frequency": r["frequency"],
+                    "Instructions": r.get("metadata", {}).get("instructions", ""),
+                    "Last Sent": r.get("metadata", {}).get("last_sent", ""),
+                    "times": r["times"],
+                    "source": "supabase"
+                })
         return active
     except Exception as e:
-        print(f"Error reading medicines: {e}")
+        print(f"Error reading medicines for {clinic.get('name')} from Supabase: {e}")
         return []
 
 def should_send_reminder(medicine, last_sent_date):
@@ -285,17 +304,26 @@ def send_medicine_reminders():
                     if send_whatsapp(clinic, phone, msg, buttons=buttons):
                         sent_count += 1
                         try:
-                            if not sheet:
-                                sheet = open_sheet(med['_sheet_name'])
-                            headers = sheet.row_values(1)
-                            if "Last Sent" in headers:
-                                col_idx = headers.index("Last Sent") + 1
-                                new_val = (last_sent + "," + dose_id).strip(",")
-                                sheet.update_cell(med['_row_idx'], col_idx, new_val)
+                            new_val = (last_sent + "," + dose_id).strip(",")
+                            if med.get("source") == "supabase":
+                                db = get_db()
+                                # Fetch current metadata
+                                res = db.table("reminders").select("metadata").eq("id", med["id"]).execute()
+                                meta = res.data[0]["metadata"] if res.data else {}
+                                meta["last_sent"] = new_val
+                                db.table("reminders").update({"metadata": meta}).eq("id", med["id"]).execute()
                                 last_sent = new_val
+                            else:
+                                if not sheet:
+                                    sheet = open_sheet(med['_sheet_name'])
+                                headers = sheet.row_values(1)
+                                if "Last Sent" in headers:
+                                    col_idx = headers.index("Last Sent") + 1
+                                    sheet.update_cell(med['_row_idx'], col_idx, new_val)
+                                    last_sent = new_val
                             print(f"      ✅ Sent!")
                         except Exception as e:
-                            print(f"      ⚠️ Sent but failed to update sheet: {e}")
+                            print(f"      ⚠️ Sent but failed to update status: {e}")
                     else:
                         print(f"      ❌ Failed")
         
@@ -353,6 +381,85 @@ def send_appointment_reminders():
         except Exception as e:
             print(f"Error: {e}")
 
+def get_active_followups(clinic):
+    """Get all active follow-up reminders for a clinic from Supabase"""
+    db = get_db()
+    if not db:
+        return []
+        
+    clinic_id = clinic["phone_number_id"]
+    try:
+        # Fetch active follow-up reminders from Supabase
+        response = db.table("reminders") \
+            .select("*") \
+            .eq("clinic_id", clinic_id) \
+            .eq("type", "follow_up") \
+            .eq("status", "Active") \
+            .execute()
+            
+        now = get_now()
+        today_str = now.strftime("%Y-%m-%d")
+
+        active = []
+        for r in response.data:
+            start_date = r.get("start_date")
+            # For follow-ups, start_date is the appointment date
+            if start_date == today_str:
+                active.append({
+                    "id": r["id"],
+                    "Phone": r["patient_phone"],
+                    "Patient Name": r["patient_name"],
+                    "Item": r["item_name"],
+                    "Date": start_date,
+                    "Last Sent": r.get("metadata", {}).get("last_sent", ""),
+                    "source": "supabase"
+                })
+        return active
+    except Exception as e:
+        print(f"Error reading follow-ups for {clinic.get('name')} from Supabase: {e}")
+        return []
+
+def send_followup_reminders():
+    """Main function to send follow-up reminders"""
+    now = get_now()
+    if now.hour != 10: # Only send follow-ups at 10 AM
+        return
+
+    print(f"\n{'='*50}")
+    print(f"📅 Running Follow-up Reminder Check - {now.strftime('%d-%m-%Y %H:%M')}")
+    print(f"{'='*50}")
+
+    clinics = get_all_clinics()
+    for clinic in clinics:
+        if clinic.get("subscription_status") != "active":
+            continue
+
+        followups = get_active_followups(clinic)
+        for f in followups:
+            phone = f['Phone']
+            name = f['Patient Name']
+            reason = f['Item']
+            last_sent = f['Last Sent']
+
+            if "sent" not in last_sent.lower():
+                msg = (
+                    f"👨‍⚕️ *Follow-up Reminder*\n\n"
+                    f"Hi {name}, this is a reminder for your scheduled follow-up today regarding:\n"
+                    f"📝 *{reason}*\n\n"
+                    f"Please contact the clinic if you have any questions or need to reschedule."
+                )
+
+                if send_whatsapp(clinic, phone, msg):
+                    try:
+                        db = get_db()
+                        res = db.table("reminders").select("metadata").eq("id", f["id"]).execute()
+                        meta = res.data[0]["metadata"] if res.data else {}
+                        meta["last_sent"] = f"sent ({get_now().strftime('%d-%m-%Y %H:%M')})"
+                        db.table("reminders").update({"metadata": meta, "status": "Completed"}).eq("id", f["id"]).execute()
+                        print(f"      ✅ Sent follow-up to {phone}")
+                    except Exception as e:
+                        print(f"      ⚠️ Failed to update status: {e}")
+
 def run_scheduler(interval_minutes=1):
     """Run the scheduler continuously"""
     print("🚀 Medicine Reminder Scheduler Started")
@@ -365,6 +472,7 @@ def run_scheduler(interval_minutes=1):
             print(f"\n--- 🕒 Scheduler Pulse: {now.strftime('%d-%m-%Y %H:%M:%S')} ---")
             send_medicine_reminders()
             send_test_reminders()
+            send_followup_reminders()
             
             if now.hour == 18 and now.minute < interval_minutes:
                 send_appointment_reminders()

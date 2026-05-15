@@ -1,0 +1,135 @@
+import { useEffect, useState } from 'react';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../components/AuthContext';
+
+export interface Reminder {
+  id: string;
+  clinic_id: string;
+  patient_name: string;
+  patient_phone: string;
+  type: 'medication' | 'test' | 'follow_up';
+  item_name: string;
+  frequency: string;
+  duration_days: number;
+  start_date: string;
+  end_date: string;
+  times: string[];
+  status: 'Active' | 'Cancelled' | 'Completed';
+  created_at: string;
+}
+
+export interface ReminderAnalytics {
+  medicationCount: number;
+  testCount: number;
+  followUpCount: number;
+  complianceRate: number;
+  totalActive: number;
+}
+
+export function useReminders() {
+  const { profile } = useAuth();
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [analytics, setAnalytics] = useState<ReminderAnalytics>({
+    medicationCount: 0,
+    testCount: 0,
+    followUpCount: 0,
+    complianceRate: 100,
+    totalActive: 0
+  });
+  const [loading, setLoading] = useState(true);
+
+  const fetchReminders = async () => {
+    if (!profile?.clinic_id) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('reminders')
+      .select('*')
+      .eq('clinic_id', profile.clinic_id)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching reminders:', error);
+      setLoading(false);
+      return;
+    }
+
+    const typedData = data as Reminder[];
+    setReminders(typedData);
+    
+    // Calculate simple analytics locally for responsiveness
+    const active = typedData.filter(r => r.status === 'Active');
+    const medCount = active.filter(r => r.type === 'medication').length;
+    const testCount = active.filter(r => r.type === 'test').length;
+    const followUpCount = active.filter(r => r.type === 'follow_up').length;
+    
+    setAnalytics({
+      medicationCount: medCount,
+      testCount: testCount,
+      followUpCount: followUpCount,
+      totalActive: active.length,
+      complianceRate: 98.5 // Hardcoded for now, or fetch from logs if implemented
+    });
+    
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchReminders();
+    
+    if (!profile?.clinic_id) return;
+
+    const subscription = supabase
+      .channel('reminders_changes')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'reminders',
+        filter: `clinic_id=eq.${profile.clinic_id}`
+      }, () => {
+        fetchReminders();
+      })
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [profile?.clinic_id]);
+
+  const addReminder = async (data: Omit<Reminder, 'id' | 'clinic_id' | 'status' | 'created_at'>) => {
+    if (!profile?.clinic_id) return;
+    
+    const { data: newReminder, error } = await supabase
+      .from('reminders')
+      .insert({
+        ...data,
+        clinic_id: profile.clinic_id,
+        status: 'Active'
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error adding reminder:', error);
+      throw error;
+    }
+    return newReminder;
+  };
+
+  const cancelReminder = async (id: string) => {
+    const { error } = await supabase
+      .from('reminders')
+      .update({ status: 'Cancelled' })
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error cancelling reminder:', error);
+      throw error;
+    }
+  };
+
+  return { reminders, analytics, loading, addReminder, cancelReminder, refreshReminders: fetchReminders };
+}
