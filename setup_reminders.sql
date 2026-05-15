@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS reminders (
     start_date DATE NOT NULL,
     end_date DATE,
     times TEXT[] DEFAULT '{}',
-    status TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Cancelled', 'Completed')),
+    status TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Cancelled', 'Completed', 'Missed')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     metadata JSONB DEFAULT '{}'
 );

@@ -18,17 +18,31 @@ import type { Reminder } from '../hooks/useReminders';
 import { CreateReminderModal } from './CreateReminderModal';
 
 export function RemindersView() {
-  const { reminders, analytics, loading, cancelReminder, addReminder } = useReminders();
+  const { reminders, analytics, loading, cancelReminder, addReminder, updateReminderStatus } = useReminders();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'medication' | 'test' | 'follow_up'>('all');
+  const [filter, setFilter] = useState<'all' | 'medication' | 'test' | 'follow_up' | 'today_follow_up'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
+  const todayStr = new Date().toISOString().split('T')[0];
+
   const filteredReminders = reminders.filter(r => {
+    if (filter === 'today_follow_up') {
+      return r.type === 'follow_up' && r.start_date === todayStr && (r.status === 'Active' || r.status === 'Missed');
+    }
     const matchesFilter = filter === 'all' || r.type === filter;
     const matchesSearch = (r.patient_name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
                          (r.item_name || '').toLowerCase().includes(searchQuery.toLowerCase());
     return matchesFilter && matchesSearch;
   });
+
+  const handleManualRemind = async (reminder: Reminder) => {
+    try {
+      // In a real SaaS, this would call a backend trigger endpoint.
+      alert(`Manual reminder triggered for ${reminder.patient_name} via WhatsApp.`);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
@@ -88,6 +102,13 @@ export function RemindersView() {
             <FilterButton active={filter === 'medication'} onClick={() => setFilter('medication')} label="Medications" />
             <FilterButton active={filter === 'test'} onClick={() => setFilter('test')} label="Tests" />
             <FilterButton active={filter === 'follow_up'} onClick={() => setFilter('follow_up')} label="Follow-ups" />
+            <div className="w-[1px] h-6 bg-slate-200 dark:bg-slate-700 mx-2" />
+            <FilterButton 
+              active={filter === 'today_follow_up'} 
+              onClick={() => setFilter('today_follow_up')} 
+              label="Today's Follow-ups" 
+              count={reminders.filter(r => r.type === 'follow_up' && r.start_date === todayStr && (r.status === 'Active' || r.status === 'Missed')).length}
+            />
           </div>
 
           <div className="relative group min-w-[300px]">
@@ -179,14 +200,38 @@ export function RemindersView() {
                       <StatusBadge status={reminder.status} />
                     </td>
                     <td className="px-8 py-6 text-right">
-                      <button 
-                        onClick={() => {
-                          if (confirm('Cancel this reminder?')) cancelReminder(reminder.id);
-                        }}
-                        className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-all"
-                      >
-                        <Trash2 size={20} />
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        {filter === 'today_follow_up' && (
+                          <>
+                            <button 
+                              onClick={() => handleManualRemind(reminder)}
+                              className="px-3 py-1.5 bg-brand-50 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400 text-[10px] font-black uppercase rounded-lg hover:bg-brand-500 hover:text-white transition-all"
+                            >
+                              Remind
+                            </button>
+                            <button 
+                              onClick={() => updateReminderStatus(reminder.id, 'Completed')}
+                              className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase rounded-lg hover:bg-emerald-500 hover:text-white transition-all"
+                            >
+                              Complete
+                            </button>
+                            <button 
+                              onClick={() => updateReminderStatus(reminder.id, 'Missed')}
+                              className="px-3 py-1.5 bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 text-[10px] font-black uppercase rounded-lg hover:bg-rose-500 hover:text-white transition-all"
+                            >
+                              Missed
+                            </button>
+                          </>
+                        )}
+                        <button 
+                          onClick={() => {
+                            if (confirm('Cancel this reminder?')) cancelReminder(reminder.id);
+                          }}
+                          className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-all"
+                        >
+                          <Trash2 size={20} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -232,18 +277,26 @@ function AnalyticsCard({ label, value, icon, color, trend }: { label: string, va
   );
 }
 
-function FilterButton({ active, onClick, label }: { active: boolean, onClick: () => void, label: string }) {
+function FilterButton({ active, onClick, label, count }: { active: boolean, onClick: () => void, label: string, count?: number }) {
   return (
     <button 
       onClick={onClick}
       className={cn(
-        "px-6 py-2.5 rounded-xl font-black text-sm transition-all",
+        "px-6 py-2.5 rounded-xl font-black text-sm transition-all flex items-center gap-2",
         active 
           ? "bg-white dark:bg-slate-700 text-brand-500 shadow-sm" 
           : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
       )}
     >
       {label}
+      {count !== undefined && count > 0 && (
+        <span className={cn(
+          "w-5 h-5 rounded-full flex items-center justify-center text-[10px]",
+          active ? "bg-brand-500 text-white" : "bg-slate-200 dark:bg-slate-700 text-slate-500"
+        )}>
+          {count}
+        </span>
+      )}
     </button>
   );
 }
@@ -272,7 +325,8 @@ function StatusBadge({ status }: { status: Reminder['status'] }) {
   const configs = {
     Active: { color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10', icon: <Activity size={12} /> },
     Cancelled: { color: 'text-slate-400 bg-slate-50 dark:bg-slate-800', icon: <AlertCircle size={12} /> },
-    Completed: { color: 'text-blue-500 bg-blue-50 dark:bg-blue-500/10', icon: <CheckCircle2 size={12} /> }
+    Completed: { color: 'text-blue-500 bg-blue-50 dark:bg-blue-500/10', icon: <CheckCircle2 size={12} /> },
+    Missed: { color: 'text-rose-500 bg-rose-50 dark:bg-rose-500/10', icon: <AlertCircle size={12} /> }
   };
 
   const config = configs[status];

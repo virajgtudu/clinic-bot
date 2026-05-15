@@ -14,7 +14,7 @@ export interface Reminder {
   start_date: string;
   end_date: string;
   times: string[];
-  status: 'Active' | 'Cancelled' | 'Completed';
+  status: 'Active' | 'Cancelled' | 'Completed' | 'Missed';
   created_at: string;
 }
 
@@ -131,5 +131,17 @@ export function useReminders() {
     }
   };
 
-  return { reminders, analytics, loading, addReminder, cancelReminder, refreshReminders: fetchReminders };
+  const updateReminderStatus = async (id: string, status: Reminder['status']) => {
+    const { error } = await supabase
+      .from('reminders')
+      .update({ status })
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error updating reminder status:', error);
+      throw error;
+    }
+  };
+
+  return { reminders, analytics, loading, addReminder, cancelReminder, updateReminderStatus, refreshReminders: fetchReminders };
 }

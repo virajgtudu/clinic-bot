@@ -35,6 +35,8 @@ import { useAuth } from '../components/AuthContext';
 import { WalkInModal } from '../components/WalkInModal';
 import { supabase } from '../lib/supabase';
 import { RemindersView } from '../components/RemindersView';
+import { FollowUpModal } from '../components/FollowUpModal';
+import { useReminders } from '../hooks/useReminders';
 
 const busiestHoursData = [
   { name: '9am', value: 40 },
@@ -51,12 +53,14 @@ type DashboardView = 'queue' | 'appointments' | 'patients' | 'reminders' | 'anal
 
 export default function Dashboard() {
   const { queue, loading, markCompleted, callNext, prioritize, addWalkIn } = useQueue();
+  const { addReminder } = useReminders();
   const { doctors } = useDoctors();
   const whatsappStatus = useWhatsAppStatus();
   const { user, profile, signOut } = useAuth();
   
   const [activeView, setActiveView] = useState<DashboardView>('queue');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [followUpPatient, setFollowUpPatient] = useState<any>(null);
 
   const emergencyQueue = queue.filter(p => p.status === 'emergency');
   const waitingQueue = queue.filter(p => p.status === 'waiting' || p.status === 'emergency' || p.status === 'serving');
@@ -359,6 +363,13 @@ export default function Dashboard() {
                                 </td>
                                 <td className="px-6 py-6 text-right first:rounded-l-2xl last:rounded-r-2xl">
                                   <div className="flex items-center justify-end gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button 
+                                      onClick={() => setFollowUpPatient(patient)} 
+                                      className="p-2.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-500 hover:text-white rounded-xl transition-all shadow-sm active:scale-90" 
+                                      title="Set Follow-up"
+                                    >
+                                      <Calendar size={18} />
+                                    </button>
                                     <button onClick={() => markCompleted(patient.id)} className="p-2.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500 hover:text-white rounded-xl transition-all shadow-sm active:scale-90" title="Complete"><CheckCircle2 size={18} /></button>
                                     <button onClick={() => prioritize(patient.id)} className="p-2.5 bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 hover:bg-rose-500 hover:text-white rounded-xl transition-all shadow-sm active:scale-90" title="Emergency"><AlertCircle size={18} /></button>
                                   </div>
@@ -453,6 +464,31 @@ export default function Dashboard() {
         doctors={doctors}
         onSubmit={async (name, phone, age, doctorId, time) => {
           await addWalkIn(name, phone, age, doctorId, time);
+        }}
+      />
+
+      <FollowUpModal
+        isOpen={!!followUpPatient}
+        onClose={() => setFollowUpPatient(null)}
+        patientName={followUpPatient?.name || ''}
+        patientPhone={followUpPatient?.phone || ''}
+        onSubmit={async (days) => {
+          if (!followUpPatient) return;
+          const start = new Date();
+          start.setDate(start.getDate() + days);
+          const dateStr = start.toISOString().split('T')[0];
+          
+          await addReminder({
+            patient_name: followUpPatient.name,
+            patient_phone: followUpPatient.phone,
+            type: 'follow_up',
+            item_name: `General Follow-up (${days} days)`,
+            frequency: 'Once',
+            duration_days: 1,
+            start_date: dateStr,
+            end_date: dateStr,
+            times: ['08:00'],
+          });
         }}
       />
     </div>

@@ -422,7 +422,7 @@ def get_active_followups(clinic):
 def send_followup_reminders():
     """Main function to send follow-up reminders"""
     now = get_now()
-    if now.hour != 10: # Only send follow-ups at 10 AM
+    if now.hour != 8: # Only send follow-ups at 8 AM
         return
 
     print(f"\n{'='*50}")
@@ -455,7 +455,7 @@ def send_followup_reminders():
                         res = db.table("reminders").select("metadata").eq("id", f["id"]).execute()
                         meta = res.data[0]["metadata"] if res.data else {}
                         meta["last_sent"] = f"sent ({get_now().strftime('%d-%m-%Y %H:%M')})"
-                        db.table("reminders").update({"metadata": meta, "status": "Completed"}).eq("id", f["id"]).execute()
+                        db.table("reminders").update({"metadata": meta}).eq("id", f["id"]).execute()
                         print(f"      ✅ Sent follow-up to {phone}")
                     except Exception as e:
                         print(f"      ⚠️ Failed to update status: {e}")
