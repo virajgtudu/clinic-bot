@@ -102,6 +102,18 @@ def get_doctors(clinic_id):
         logger.error(f"Supabase fetch doctors error: {e}")
         return []
 
+def get_all_clinics():
+    """Fetch all clinics from the clinics table in Supabase."""
+    db = get_db()
+    if not db:
+        return []
+    try:
+        response = db.table("clinics").select("*").execute()
+        return response.data
+    except Exception as e:
+        logger.error(f"Supabase fetch all clinics error: {e}")
+        return []
+
 # --- Reminders Module ---
 
 def create_reminder(data):

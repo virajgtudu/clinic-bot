@@ -6,10 +6,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from config import get_all_clinics, get_clinic, get_now
+from config import get_clinic, get_now
 from services.sheets import MEDICINE_HEADERS, TEST_HEADERS, ensure_headers, open_sheet
 from services.whatsapp import send_text, send_buttons
-from services.database import get_db
+from services.database import get_db, get_all_clinics
 
 
 def get_active_tests(clinic):
@@ -64,7 +64,8 @@ def send_test_reminders():
     current_hour = now.hour
 
     for clinic in clinics:
-        if clinic.get("subscription_status") != "active":
+        status = clinic.get("subscription_status")
+        if status and status not in ["active", "trial"]:
             continue
 
         tests = get_active_tests(clinic)
@@ -213,8 +214,9 @@ def send_medicine_reminders():
     today_str = now.strftime("%d-%m-%Y")
     
     for clinic in clinics:
-        if clinic.get("subscription_status") != "active":
-            print(f"Skipping {clinic['name']} - not active")
+        status = clinic.get("subscription_status")
+        if status and status not in ["active", "trial"]:
+            print(f"Skipping {clinic['name']} - status: {status}")
             continue
         
         print(f"\n📋 Processing: {clinic['name']}")
@@ -342,7 +344,8 @@ def send_appointment_reminders():
     tomorrow = (now + timedelta(days=1)).strftime("%d-%m-%Y")
     
     for clinic in clinics:
-        if clinic.get("subscription_status") != "active":
+        status = clinic.get("subscription_status")
+        if status and status not in ["active", "trial"]:
             continue
         
         sheet_name = clinic.get("sheet_name")
@@ -403,8 +406,9 @@ def get_active_followups(clinic):
         active = []
         for r in response.data:
             start_date = r.get("start_date")
-            # For follow-ups, start_date is the appointment date
-            if start_date == today_str:
+            # For follow-ups, start_date is the appointment date.
+            # We process reminders for today or any pending ones from the past.
+            if start_date <= today_str:
                 active.append({
                     "id": r["id"],
                     "Phone": r["patient_phone"],
@@ -422,7 +426,8 @@ def get_active_followups(clinic):
 def send_followup_reminders():
     """Main function to send follow-up reminders"""
     now = get_now()
-    if now.hour != 8: # Only send follow-ups at 8 AM
+    # Broaden the window to ensure delivery even if server was down at 8 AM.
+    if now.hour < 8 or now.hour > 20:
         return
 
     print(f"\n{'='*50}")
@@ -430,8 +435,12 @@ def send_followup_reminders():
     print(f"{'='*50}")
 
     clinics = get_all_clinics()
+    today_date_str = now.strftime("%d-%m-%Y")
+
     for clinic in clinics:
-        if clinic.get("subscription_status") != "active":
+        # Allow clinics without explicit status (trial by default)
+        status = clinic.get("subscription_status")
+        if status and status not in ["active", "trial"]:
             continue
 
         followups = get_active_followups(clinic)
@@ -439,9 +448,10 @@ def send_followup_reminders():
             phone = f['Phone']
             name = f['Patient Name']
             reason = f['Item']
-            last_sent = f['Last Sent']
+            last_sent = str(f['Last Sent'])
 
-            if "sent" not in last_sent.lower():
+            # Only send if not already sent today
+            if today_date_str not in last_sent:
                 msg = (
                     f"👨‍⚕️ *Follow-up Reminder*\n\n"
                     f"Hi {name}, this is a reminder for your scheduled follow-up today regarding:\n"
