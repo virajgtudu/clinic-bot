@@ -351,7 +351,11 @@ export default function Dashboard() {
                                 </td>
                                 <td className="px-6 py-6">
                                   <p className="font-bold text-sm text-slate-800 dark:text-white">{patient.name}</p>
-                                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">Regular Visit</p>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Regular Visit</p>
+                                    <div className="w-1 h-1 rounded-full bg-slate-300" />
+                                    <p className="text-[10px] text-brand-500 font-black uppercase tracking-widest">{patient.booking_time}</p>
+                                  </div>
                                 </td>
                                 <td className="px-6 py-6">
                                   <div className={cn(
