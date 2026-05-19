@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 from dotenv import load_dotenv
-from services.database import get_db, update_appointment_status
+from services.database import get_db, update_appointment_status, create_reminder, create_appointment
 
 logger = logging.getLogger(__name__)
 
@@ -253,7 +253,7 @@ def update_booking_status_in_sheet(clinic, token, new_status):
             # Find the record ID
             response = db.table("appointments") \
                 .select("id") \
-                .eq("clinic_id", clinic["phone_number_id"]) \
+                .eq("clinic_id", clinic.get("phone_number_id") or clinic.get("id")) \
                 .eq("doctor_id", doctor_id) \
                 .eq("booking_date", db_date) \
                 .eq("token", tk_num) \
@@ -1159,6 +1159,30 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                                     st.session_state.temp_appointment_id
                                 ])
                                 success_count += 1
+                                # Sync to Supabase
+                                try:
+                                    db_start_date = datetime.strptime(start_date_str, "%d-%m-%Y").strftime("%Y-%m-%d")
+                                    db_end_date = datetime.strptime(end_date_str, "%d-%m-%Y").strftime("%Y-%m-%d")
+                                    create_reminder({
+                                        "clinic_id": clinic.get("phone_number_id") or clinic.get("id"),
+                                        "patient_name": st.session_state.temp_patient_name or "Patient",
+                                        "patient_phone": st.session_state.temp_patient_phone,
+                                        "type": "medication",
+                                        "item_name": med['name'],
+                                        "frequency": med['frequency'],
+                                        "duration_days": int(st.session_state.temp_duration),
+                                        "start_date": db_start_date,
+                                        "end_date": db_end_date,
+                                        "times": [t for t in med['times'] if t],
+                                        "status": "Active",
+                                        "metadata": {
+                                            "source": "dashboard",
+                                            "dosage": med['dosage'],
+                                            "instructions": f"Added via dashboard. Ref: {st.session_state.temp_appointment_id}"
+                                        }
+                                    })
+                                except Exception as sbe:
+                                    logger.error(f"Supabase sync error for {med['name']}: {sbe}")
                             except Exception as e:
                                 st.error(f"Error saving {med['name']}: {e}")
                         
@@ -1225,6 +1249,25 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                                         get_now().strftime("%d-%m-%Y %H:%M")
                                     ])
                                     st.success("Test reminder scheduled!")
+                                    # Sync to Supabase
+                                    try:
+                                        db_date = test_date.strftime("%Y-%m-%d")
+                                        create_reminder({
+                                            "clinic_id": clinic.get("phone_number_id") or clinic.get("id"),
+                                            "patient_name": "Patient",
+                                            "patient_phone": med_phone,
+                                            "type": "test",
+                                            "item_name": test_name,
+                                            "start_date": db_date,
+                                            "status": "Active",
+                                            "metadata": {
+                                                "source": "dashboard",
+                                                "instructions": med_instructions + (f"\n\nInstructions: {test_instr}" if test_instr else ""),
+                                                "scheduled_time": time_str
+                                            }
+                                        })
+                                    except Exception as sbe:
+                                        logger.error(f"Supabase sync error for test {test_name}: {sbe}")
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"Sheet error: {e}")
@@ -1266,6 +1309,25 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                                         get_now().strftime("%d-%m-%Y %H:%M")
                                     ])
                                     st.success("Follow-up reminder set!")
+                                    # Sync to Supabase
+                                    try:
+                                        db_date = med_start.strftime("%Y-%m-%d")
+                                        create_reminder({
+                                            "clinic_id": clinic.get("phone_number_id") or clinic.get("id"),
+                                            "patient_name": "Patient",
+                                            "patient_phone": med_phone,
+                                            "type": "follow_up",
+                                            "item_name": med_name,
+                                            "start_date": db_date,
+                                            "status": "Active",
+                                            "metadata": {
+                                                "source": "dashboard",
+                                                "instructions": med_instructions,
+                                                "preferred_time": time1_str
+                                            }
+                                        })
+                                    except Exception as sbe:
+                                        logger.error(f"Supabase sync error for follow-up: {sbe}")
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"Sheet error: {e}")

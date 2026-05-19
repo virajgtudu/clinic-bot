@@ -264,7 +264,7 @@ def _has_active_prescription_session(clinic, phone):
         if not db:
             raise Exception("Database not available")
         
-        clinic_id = clinic["phone_number_id"]
+        clinic_id = clinic.get("phone_number_id") or clinic.get("id")
         normalized_phone = _normalize_phone(phone)
         now = get_now()
         since = (now - timedelta(hours=48)).strftime("%Y-%m-%d %H:%M:%S")
@@ -346,7 +346,7 @@ def _handle_patient_reminder_flow(clinic, phone, text, raw_text, key, session):
     step = session.get("step", "patient_rem_menu")
 
     if text in {"reminders", "patient_rem_menu", "menu"}:
-        user_sessions[key] = {"step": "patient_rem_menu", "clinic_id": clinic["phone_number_id"], "phone": phone}
+        user_sessions[key] = {"step": "patient_rem_menu", "clinic_id": (clinic.get("phone_number_id") or clinic.get("id")), "phone": phone}
         _show_patient_reminders_menu(clinic, phone)
         return True
 
@@ -361,7 +361,7 @@ def _handle_patient_reminder_flow(clinic, phone, text, raw_text, key, session):
             name = verified_names[0]
             user_sessions[key] = {
                 "step": "patient_rem_verify", 
-                "clinic_id": clinic["phone_number_id"], 
+                "clinic_id": (clinic.get("phone_number_id") or clinic.get("id")), 
                 "phone": phone,
                 "verified_name": name
             }
@@ -376,7 +376,7 @@ def _handle_patient_reminder_flow(clinic, phone, text, raw_text, key, session):
         # Multiple patients found
         user_sessions[key] = {
             "step": "patient_rem_select_name",
-            "clinic_id": clinic["phone_number_id"],
+            "clinic_id": (clinic.get("phone_number_id") or clinic.get("id")),
             "phone": phone,
             "names": verified_names
         }
@@ -394,7 +394,7 @@ def _handle_patient_reminder_flow(clinic, phone, text, raw_text, key, session):
             
         user_sessions[key] = {
             "step": "patient_rem_verify",
-            "clinic_id": clinic["phone_number_id"],
+            "clinic_id": (clinic.get("phone_number_id") or clinic.get("id")),
             "phone": phone,
             "verified_name": name
         }
@@ -487,12 +487,27 @@ def _handle_patient_reminder_flow(clinic, phone, text, raw_text, key, session):
                 ""                              # Col 16: Appointment ID (Empty for patient set)
             ],
         )
-        
+
+        # Supabase Medication Reminder
+        create_reminder({
+            "clinic_id": (clinic.get("phone_number_id") or clinic.get("id")),
+            "patient_name": full_name,
+            "patient_phone": phone,
+            "type": "medication",
+            "item_name": session.get("medicine"),
+            "frequency": session.get("freq_label"),
+            "duration_days": days,
+            "start_date": start_date.strftime("%Y-%m-%d"),
+            "end_date": end_date.strftime("%Y-%m-%d"),
+            "times": times,
+            "status": "Active",
+            "metadata": {"source": "whatsapp_patient"}
+        })
+
         send_text(clinic, phone, f"✅ Reminder set for {session.get('medicine')} successfully!")
         _show_main_menu(clinic, phone)
         user_sessions.pop(key, None)
         return True
-
     if step == "patient_rem_menu" and text == "patient_rem_view":
         reminders = _load_active_staff_reminders(clinic) # Using same helper for now
         my_reminders = [r for r in reminders if _normalize_phone(r.get("Phone")) == _normalize_phone(phone)]
@@ -583,7 +598,7 @@ def _save_staff_reminder(clinic, session):
     reminder_times = session.get("reminder_times", [])
     duration_days = (datetime.strptime(end_date, "%d-%m-%Y") - datetime.strptime(start_date, "%d-%m-%Y")).days + 1
 
-    clinic_id = clinic["phone_number_id"]
+    clinic_id = clinic.get("phone_number_id") or clinic.get("id")
 
     # Convert dates for Supabase (YYYY-MM-DD)
     try:
@@ -701,12 +716,12 @@ def _handle_staff_flow(clinic, phone, text, raw_text, key, session):
     step = session.get("step", "staff_menu")
 
     if text in {"staff", "staff_menu", "menu", "hi", "hello", "start"}:
-        user_sessions[key] = {"step": "staff_menu", "clinic_id": clinic["phone_number_id"], "phone": phone, "is_staff": True}
+        user_sessions[key] = {"step": "staff_menu", "clinic_id": (clinic.get("phone_number_id") or clinic.get("id")), "phone": phone, "is_staff": True}
         _show_staff_panel(clinic, phone)
         return True
 
     if step == "staff_menu" and text == "staff_add":
-        user_sessions[key] = {"step": "staff_name", "clinic_id": clinic["phone_number_id"], "phone": phone, "is_staff": True}
+        user_sessions[key] = {"step": "staff_name", "clinic_id": (clinic.get("phone_number_id") or clinic.get("id")), "phone": phone, "is_staff": True}
         send_text(clinic, phone, "Enter patient name")
         return True
 
@@ -723,7 +738,7 @@ def _handle_staff_flow(clinic, phone, text, raw_text, key, session):
         return True
 
     if step == "staff_menu" and text == "staff_cancel":
-        user_sessions[key] = {"step": "staff_cancel_phone", "clinic_id": clinic["phone_number_id"], "phone": phone, "is_staff": True}
+        user_sessions[key] = {"step": "staff_cancel_phone", "clinic_id": (clinic.get("phone_number_id") or clinic.get("id")), "phone": phone, "is_staff": True}
         send_text(clinic, phone, "Enter patient phone number to cancel active reminders")
         return True
 
@@ -736,7 +751,7 @@ def _handle_staff_flow(clinic, phone, text, raw_text, key, session):
     if step == "staff_cancel_name":
         count = _cancel_staff_reminders(clinic, session.get("cancel_phone"), raw_text.strip())
         send_text(clinic, phone, f"Cancelled {count} active reminders for {raw_text.strip()}.")
-        user_sessions[key] = {"step": "staff_menu", "clinic_id": clinic["phone_number_id"], "phone": phone, "is_staff": True}
+        user_sessions[key] = {"step": "staff_menu", "clinic_id": (clinic.get("phone_number_id") or clinic.get("id")), "phone": phone, "is_staff": True}
         _show_staff_panel(clinic, phone)
         return True
 
@@ -747,7 +762,7 @@ def _handle_staff_flow(clinic, phone, text, raw_text, key, session):
             return True
         user_sessions[key] = {
             "step": "staff_age",
-            "clinic_id": clinic["phone_number_id"],
+            "clinic_id": (clinic.get("phone_number_id") or clinic.get("id")),
             "phone": phone,
             "is_staff": True,
             "patient_name": patient_name,
@@ -911,7 +926,7 @@ def _handle_staff_flow(clinic, phone, text, raw_text, key, session):
 
     if step == "staff_confirm" and text in {"staff_confirm", "staff_edit"}:
         if text == "staff_edit":
-            user_sessions[key] = {"step": "staff_name", "clinic_id": clinic["phone_number_id"], "phone": phone, "is_staff": True}
+            user_sessions[key] = {"step": "staff_name", "clinic_id": (clinic.get("phone_number_id") or clinic.get("id")), "phone": phone, "is_staff": True}
             send_text(clinic, phone, "Enter patient name")
             return True
 
@@ -921,7 +936,7 @@ def _handle_staff_flow(clinic, phone, text, raw_text, key, session):
             "The patient will receive reminders automatically."
         )
         send_text(clinic, phone, message)
-        user_sessions[key] = {"step": "staff_menu", "clinic_id": clinic["phone_number_id"], "phone": phone, "is_staff": True}
+        user_sessions[key] = {"step": "staff_menu", "clinic_id": (clinic.get("phone_number_id") or clinic.get("id")), "phone": phone, "is_staff": True}
         _show_staff_panel(clinic, phone)
         return True
 
@@ -945,7 +960,7 @@ def _get_queue_status_info(clinic, phone):
         now = get_now()
         today = now.strftime("%Y-%m-%d")
         normalized_phone = _normalize_phone(phone)
-        clinic_id = clinic["phone_number_id"]
+        clinic_id = clinic.get("phone_number_id") or clinic.get("id")
         
         # 1. Find patient's active booking for today in Supabase
         db = get_db()
@@ -1025,7 +1040,7 @@ def _get_queue_status_info(clinic, phone):
 
 
 def handle_message(clinic, message):
-    clinic_id = clinic["phone_number_id"]
+    clinic_id = clinic.get("phone_number_id") or clinic.get("id")
     phone = message.get("from")
     raw_text, text = _extract_text(message)
     if not phone:

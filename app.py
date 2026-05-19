@@ -21,14 +21,19 @@ def run_scheduled_tasks():
     now = get_now()
     logging.info(f"⏰ Running scheduled tasks pulse... (IST: {now.strftime('%H:%M')})")
     try:
+        logging.info("Checking medicine reminders...")
         send_medicine_reminders()
+        
+        logging.info("Checking test reminders...")
         send_test_reminders()
         
         # Appointment reminders run once a day at 18:00 (6 PM) IST
         if now.hour == 18:
+            logging.info("Checking appointment reminders...")
             send_appointment_reminders()
     except Exception as e:
-        logging.error(f"Error in scheduled tasks: {e}")
+        import traceback
+        logging.error(f"Error in scheduled tasks: {e}\n{traceback.format_exc()}")
 
 
 def create_app():

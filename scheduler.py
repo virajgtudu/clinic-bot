@@ -18,12 +18,15 @@ def get_active_tests(clinic):
     if not db:
         return []
         
-    clinic_id = clinic["phone_number_id"]
+    clinic_id = clinic.get("id") or clinic.get("phone_number_id")
+    if not clinic_id:
+        return []
+        
     try:
         # Fetch active test reminders from Supabase
         response = db.table("reminders") \
             .select("*") \
-            .eq("clinic_id", clinic_id) \
+            .eq("clinic_id", str(clinic_id)) \
             .eq("type", "test") \
             .eq("status", "Active") \
             .execute()
@@ -37,13 +40,14 @@ def get_active_tests(clinic):
             start_date = r.get("start_date")
             if start_date in [today_str, tomorrow_str]:
                 # Map Supabase fields to the format expected by the existing sender logic
+                meta = r.get("metadata") or {}
                 active.append({
                     "id": r["id"],
                     "Phone": r["patient_phone"],
                     "Test Name": r["item_name"],
-                    "Instructions": r.get("metadata", {}).get("instructions", "Follow prescribed precautions."),
+                    "Instructions": meta.get("instructions", "Follow prescribed precautions."),
                     "Date": datetime.strptime(start_date, "%Y-%m-%d").strftime("%d-%m-%Y"),
-                    "Last Sent": r.get("metadata", {}).get("last_sent", ""),
+                    "Last Sent": meta.get("last_sent", ""),
                     "source": "supabase"
                 })
         return active
@@ -72,7 +76,7 @@ def send_test_reminders():
         if not tests:
             continue
 
-        print(f"   Found {len(tests)} potential tests for {clinic['name']}")
+        print(f"   Found {len(tests)} potential tests for {clinic.get('name')}")
         sheet = None
         for t in tests:
             phone = str(t.get('Phone', ''))
@@ -111,10 +115,10 @@ def send_test_reminders():
                     if t.get("source") == "supabase":
                         db = get_db()
                         # Fetch current metadata
-                        res = db.table("reminders").select("metadata").eq("id", t["id"]).execute()
-                        meta = res.data[0]["metadata"] if res.data else {}
+                        res = db.table("reminders").select("metadata").eq("id", t.get("id")).execute()
+                        meta = (res.data[0]["metadata"] if res.data else {}) or {}
                         meta["last_sent"] = new_val
-                        db.table("reminders").update({"metadata": meta}).eq("id", t["id"]).execute()
+                        db.table("reminders").update({"metadata": meta}).eq("id", t.get("id")).execute()
                     else:
                         if not sheet:
                             sheet = open_sheet(t['_sheet_name'])
@@ -147,12 +151,15 @@ def get_active_medicines(clinic):
     if not db:
         return []
         
-    clinic_id = clinic["phone_number_id"]
+    clinic_id = clinic.get("id") or clinic.get("phone_number_id")
+    if not clinic_id:
+        return []
+        
     try:
         # Fetch active medication reminders from Supabase
         response = db.table("reminders") \
             .select("*") \
-            .eq("clinic_id", clinic_id) \
+            .eq("clinic_id", str(clinic_id)) \
             .eq("type", "medication") \
             .eq("status", "Active") \
             .execute()
@@ -167,13 +174,14 @@ def get_active_medicines(clinic):
             
             if start_date <= today <= end_date:
                 # Map to format expected by existing logic
+                meta = r.get("metadata") or {}
                 active.append({
                     "id": r["id"],
                     "Phone": r["patient_phone"],
                     "Medicine": r["item_name"],
                     "Frequency": r["frequency"],
-                    "Instructions": r.get("metadata", {}).get("instructions", ""),
-                    "Last Sent": r.get("metadata", {}).get("last_sent", ""),
+                    "Instructions": meta.get("instructions", ""),
+                    "Last Sent": meta.get("last_sent", ""),
                     "times": r["times"],
                     "source": "supabase"
                 })
@@ -216,13 +224,13 @@ def send_medicine_reminders():
     for clinic in clinics:
         status = clinic.get("subscription_status")
         if status and status not in ["active", "trial"]:
-            print(f"Skipping {clinic['name']} - status: {status}")
+            print(f"Skipping {clinic.get('name')} - status: {status}")
             continue
         
-        print(f"\n📋 Processing: {clinic['name']}")
+        print(f"\n📋 Processing: {clinic.get('name')}")
         
         medicines = get_active_medicines(clinic)
-        print(f"   Found {len(medicines)} active medicines for {clinic['name']}")
+        print(f"   Found {len(medicines)} active medicines for {clinic.get('name')}")
         
         sent_count = 0
         for med in medicines:
@@ -235,23 +243,25 @@ def send_medicine_reminders():
             instructions = med.get("Instructions", "")
             last_sent = str(med.get("Last Sent", ""))
             
-            # Get times from Time 1, Time 2, Time 3 columns
-            configured_times = []
-            for i in range(1, 4):
-                val = str(med.get(f"Time {i}", "")).strip()
-                if val:
-                    configured_times.append(val)
-            
-            # Check instructions for override
-            if "Reminder Times:" in instructions:
-                match = re.search(r"Reminder Times:\s*(.*)", instructions)
-                if match:
-                    instruction_times = [item.strip() for item in match.group(1).split(",") if item.strip()]
-                    if instruction_times:
-                        configured_times = instruction_times
-
             # Fallback to frequency-based defaults if no times configured
-            reminder_times = configured_times if configured_times else get_reminder_time(frequency)
+            reminder_times = med.get("times")
+            if not reminder_times:
+                # Get times from Time 1, Time 2, Time 3 columns (for Sheet source)
+                configured_times = []
+                for i in range(1, 4):
+                    val = str(med.get(f"Time {i}", "")).strip()
+                    if val:
+                        configured_times.append(val)
+                
+                # Check instructions for override
+                if "Reminder Times:" in instructions:
+                    match = re.search(r"Reminder Times:\s*(.*)", instructions)
+                    if match:
+                        instruction_times = [item.strip() for item in match.group(1).split(",") if item.strip()]
+                        if instruction_times:
+                            configured_times = instruction_times
+                
+                reminder_times = configured_times if configured_times else get_reminder_time(frequency)
             
             sheet = None
             for reminder_time in reminder_times:
@@ -310,10 +320,10 @@ def send_medicine_reminders():
                             if med.get("source") == "supabase":
                                 db = get_db()
                                 # Fetch current metadata
-                                res = db.table("reminders").select("metadata").eq("id", med["id"]).execute()
-                                meta = res.data[0]["metadata"] if res.data else {}
+                                res = db.table("reminders").select("metadata").eq("id", med.get("id")).execute()
+                                meta = (res.data[0]["metadata"] if res.data else {}) or {}
                                 meta["last_sent"] = new_val
-                                db.table("reminders").update({"metadata": meta}).eq("id", med["id"]).execute()
+                                db.table("reminders").update({"metadata": meta}).eq("id", med.get("id")).execute()
                                 last_sent = new_val
                             else:
                                 if not sheet:
@@ -390,12 +400,15 @@ def get_active_followups(clinic):
     if not db:
         return []
         
-    clinic_id = clinic["phone_number_id"]
+    clinic_id = clinic.get("id") or clinic.get("phone_number_id")
+    if not clinic_id:
+        return []
+        
     try:
         # Fetch active follow-up reminders from Supabase
         response = db.table("reminders") \
             .select("*") \
-            .eq("clinic_id", clinic_id) \
+            .eq("clinic_id", str(clinic_id)) \
             .eq("type", "follow_up") \
             .eq("status", "Active") \
             .execute()
@@ -409,13 +422,14 @@ def get_active_followups(clinic):
             # For follow-ups, start_date is the appointment date.
             # We process reminders for today or any pending ones from the past.
             if start_date <= today_str:
+                meta = r.get("metadata") or {}
                 active.append({
                     "id": r["id"],
                     "Phone": r["patient_phone"],
                     "Patient Name": r["patient_name"],
                     "Item": r["item_name"],
                     "Date": start_date,
-                    "Last Sent": r.get("metadata", {}).get("last_sent", ""),
+                    "Last Sent": meta.get("last_sent", ""),
                     "source": "supabase"
                 })
         return active
@@ -445,10 +459,10 @@ def send_followup_reminders():
 
         followups = get_active_followups(clinic)
         for f in followups:
-            phone = f['Phone']
-            name = f['Patient Name']
-            reason = f['Item']
-            last_sent = str(f['Last Sent'])
+            phone = f.get('Phone', '')
+            name = f.get('Patient Name', 'Patient')
+            reason = f.get('Item', 'Follow-up')
+            last_sent = str(f.get('Last Sent', ''))
 
             # Only send if not already sent today
             if today_date_str not in last_sent:
@@ -462,10 +476,10 @@ def send_followup_reminders():
                 if send_whatsapp(clinic, phone, msg):
                     try:
                         db = get_db()
-                        res = db.table("reminders").select("metadata").eq("id", f["id"]).execute()
-                        meta = res.data[0]["metadata"] if res.data else {}
+                        res = db.table("reminders").select("metadata").eq("id", f.get("id")).execute()
+                        meta = (res.data[0]["metadata"] if res.data else {}) or {}
                         meta["last_sent"] = f"sent ({get_now().strftime('%d-%m-%Y %H:%M')})"
-                        db.table("reminders").update({"metadata": meta}).eq("id", f["id"]).execute()
+                        db.table("reminders").update({"metadata": meta}).eq("id", f.get("id")).execute()
                         print(f"      ✅ Sent follow-up to {phone}")
                     except Exception as e:
                         print(f"      ⚠️ Failed to update status: {e}")

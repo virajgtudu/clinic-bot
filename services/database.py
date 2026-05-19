@@ -103,13 +103,34 @@ def get_doctors(clinic_id):
         return []
 
 def get_all_clinics():
-    """Fetch all clinics from the clinics table in Supabase."""
+    """Fetch all clinics from the clinics table in Supabase and merge with local config."""
+    from config import load_config
     db = get_db()
     if not db:
         return []
     try:
+        local_config = load_config()
         response = db.table("clinics").select("*").execute()
-        return response.data
+        
+        clinics = []
+        for c in response.data:
+            clinic_id = str(c.get("id") or "")
+            if not clinic_id:
+                logger.warning(f"Found clinic with missing ID in Supabase: {c}")
+                continue
+                
+            # Create a base item from Supabase data
+            item = dict(c)
+            item["phone_number_id"] = clinic_id
+            item["id"] = clinic_id
+            
+            # Merge with local config if available
+            if clinic_id in local_config:
+                for key, val in local_config[clinic_id].items():
+                    item.setdefault(key, val)
+            
+            clinics.append(item)
+        return clinics
     except Exception as e:
         logger.error(f"Supabase fetch all clinics error: {e}")
         return []
