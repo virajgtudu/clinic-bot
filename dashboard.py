@@ -338,6 +338,12 @@ def load_clinic_data(clinic, demo_mode=False):
 
 def send_whatsapp(clinic, phone, message, buttons=None):
     try:
+        token = get_access_token(clinic)
+        if not token:
+            st.error("WhatsApp Access Token is missing for this clinic. Please check your Render environment variables.")
+            return False
+            
+        logger.info(f"Manual WhatsApp attempt to {phone} for clinic {clinic.get('id')}")
         if buttons:
             send_buttons(clinic, phone, message, buttons)
         else:
@@ -345,6 +351,7 @@ def send_whatsapp(clinic, phone, message, buttons=None):
         return True
     except Exception as e:
         logger.error(f"WhatsApp error: {e}")
+        st.error(f"WhatsApp Error: {e}")
         return False
 
 def load_all_bookings():
@@ -857,6 +864,27 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                                                 get_now().strftime("%d-%m-%Y %H:%M")
                                             ])
                                             st.success(f"Reminder set for {followup_date}!")
+                                            
+                                            # Sync to Supabase for Scheduler
+                                            try:
+                                                db_date = datetime.strptime(followup_date, "%d-%m-%Y").strftime("%Y-%m-%d")
+                                                create_reminder({
+                                                    "clinic_id": clinic.get("phone_number_id") or clinic.get("id"),
+                                                    "patient_name": name,
+                                                    "patient_phone": phone,
+                                                    "type": "follow_up",
+                                                    "item_name": f"Follow-up: {name}",
+                                                    "start_date": db_date,
+                                                    "times": ["10:00"], # Default for queue-based followups
+                                                    "status": "Active",
+                                                    "metadata": {
+                                                        "source": "queue_popover",
+                                                        "instructions": final_msg,
+                                                        "original_appointment_date": appointment_date
+                                                    }
+                                                })
+                                            except Exception as sbe:
+                                                logger.error(f"Supabase sync error for queue follow-up: {sbe}")
                                         except Exception as e:
                                             st.error(f"Error: {e}")
         
@@ -1272,6 +1300,8 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"Sheet error: {e}")
+                            else:
+                                st.error("Failed to notify patient via WhatsApp.")
 
             elif st.session_state.get("reminder_type_radio") == "Follow-up":
                 with st.form("add_followup_reminder"):
@@ -1333,6 +1363,8 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"Sheet error: {e}")
+                            else:
+                                st.error("Failed to notify patient via WhatsApp.")
         
         st.divider()
         
