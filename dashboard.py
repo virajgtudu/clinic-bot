@@ -334,7 +334,72 @@ def load_clinic_data(clinic, demo_mode=False):
     except Exception as e:
         logger.error(f"Follow-ups sheet load issue: {e}")
 
-    return bookings, medicines, tests, followups
+    # Fetch Supabase reminders for status matching
+    from services.database import get_active_reminders
+    reminders_supabase = get_active_reminders(clinic.get("phone_number_id") or clinic.get("id"))
+    reminders_df = pd.DataFrame(reminders_supabase) if reminders_supabase else pd.DataFrame()
+
+    return bookings, medicines, tests, followups, reminders_df
+
+
+    def update_reminder_status_supabase(reminder_id, status):
+
+    """Helper to update status in Supabase for all reminder types"""
+    try:
+        db = get_db()
+        if db:
+            db.table("reminders").update({"status": status}).eq("id", reminder_id).execute()
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Error updating Supabase reminder status: {e}")
+        return False
+
+
+def update_medicine_status_in_sheet(clinic, phone, medicine_name, new_status):
+    try:
+        sheet_name = clinic.get("medicines_sheet")
+        if not sheet_name: return False
+        sheet = open_sheet(sheet_name)
+        rows = sheet.get_all_records()
+        headers = sheet.row_values(1)
+        
+        status_col = headers.index("Status") + 1
+        phone_col = headers.index("Phone") + 1
+        med_col = headers.index("Medicine") + 1
+        
+        for idx, row in enumerate(rows, start=2):
+            if str(row.get("Phone", "")).strip() == str(phone).strip() and \
+               str(row.get("Medicine", "")).strip() == str(medicine_name).strip():
+                sheet.update_cell(idx, status_col, new_status)
+                return True
+        return False
+    except Exception as e:
+        logger.error(f"Error updating medicine status in sheet: {e}")
+        return False
+
+
+def update_followup_status_in_sheet(clinic, phone, item_name, new_status):
+    try:
+        followup_sheet_name = f"{clinic.get('name', 'clinic').lower().replace(' ', '_')}_followup"
+        sheet = open_sheet(followup_sheet_name)
+        rows = sheet.get_all_records()
+        headers = sheet.row_values(1)
+        
+        status_col = headers.index("Status") + 1
+        phone_col = headers.index("Phone") + 1
+        item_col = headers.index("Item") + 1
+        
+        for idx, row in enumerate(rows, start=2):
+            if str(row.get("Phone", "")).strip() == str(phone).strip() and \
+               str(row.get("Item", "")).strip() == str(item_name).strip():
+                sheet.update_cell(idx, status_col, new_status)
+                return True
+        return False
+    except Exception as e:
+        logger.error(f"Error updating followup status in sheet: {e}")
+        return False
+
 
 def send_whatsapp(clinic, phone, message, buttons=None):
     try:
@@ -613,9 +678,10 @@ def show_admin_panel():
     st.markdown("---")
     st.caption("🏥 Admin Panel - Manage all clinics")
 
-def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=None):
+def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=None, reminders_supabase=None):
     if tests is None: tests = pd.DataFrame()
     if followups is None: followups = pd.DataFrame()
+    if reminders_supabase is None: reminders_supabase = pd.DataFrame()
     today = get_now().strftime("%d-%m-%Y")
     tomorrow = (get_now() + timedelta(days=1)).strftime("%d-%m-%Y")
     next_week = [(get_now() + timedelta(days=i)).strftime("%d-%m-%Y") for i in range(7)]
@@ -1021,7 +1087,51 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
         with rtab2:
             st.dataframe(tests, use_container_width=True, hide_index=True)
         with rtab3:
-            st.dataframe(followups, use_container_width=True, hide_index=True)
+            if not followups.empty:
+                # Filter for today or active followups
+                st.info(f"🔄 {len(followups)} active follow-up reminders")
+                for idx, row in followups.head(20).iterrows():
+                    with st.container(border=True):
+                        c1, c2, c3 = st.columns([2, 2, 1.5])
+                        c1.markdown(f"**{row.get('Phone', 'N/A')}**\n{row.get('Patient Name', 'Patient')}")
+                        c2.caption(f"📅 {row.get('Date', 'N/A')}\n📝 {row.get('Item', 'Follow-up')}")
+                        
+                        # Find matching Supabase record
+                        f_id = None
+                        if not reminders_supabase.empty:
+                            matching = reminders_supabase[
+                                (reminders_supabase['patient_phone'] == str(row.get('Phone'))) & 
+                                (reminders_supabase['type'] == 'follow_up')
+                            ]
+                            if not matching.empty:
+                                f_id = matching.iloc[0]['id']
+
+                        with c3:
+                            rem_btn, comp_btn, miss_btn = st.columns(3)
+                            if rem_btn.button(f"📤", key=f"fup_rem_btn_{idx}", help="Send WhatsApp Reminder"):
+                                msg = f"🔄 Follow-up Reminder: Hi {row.get('Patient Name', 'Patient')}, this is a reminder for your follow-up regarding {row.get('Item', 'your visit')} scheduled for {row.get('Date', '')}."
+                                if send_whatsapp(clinic, row.get('Phone', ''), msg):
+                                    st.success("Sent!")
+                                else:
+                                    st.error("Failed")
+                                    
+                            if comp_btn.button(f"✅", key=f"fup_comp_btn_{idx}", help="Mark as Completed"):
+                                if update_followup_status_in_sheet(clinic, row.get('Phone'), row.get('Item'), "Completed"):
+                                    if f_id: update_reminder_status_supabase(f_id, "Completed")
+                                    st.success("Completed")
+                                    st.rerun()
+                                else:
+                                    st.error("Failed")
+
+                            if miss_btn.button(f"❌", key=f"fup_miss_btn_{idx}", help="Mark as Missed"):
+                                if update_followup_status_in_sheet(clinic, row.get('Phone'), row.get('Item'), "Missed"):
+                                    if f_id: update_reminder_status_supabase(f_id, "Missed")
+                                    st.warning("Missed")
+                                    st.rerun()
+                                else:
+                                    st.error("Failed")
+            else:
+                st.info("No active follow-ups found.")
         
         st.divider()
         
@@ -1387,17 +1497,49 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                 st.info(f"💊 {len(active_today)} patients have medicine reminders for today")
                 for idx, row in active_today.head(10).iterrows():
                     with st.container(border=True):
-                        c1, c2, c3 = st.columns([2, 2, 1])
+                        c1, c2, c3 = st.columns([2, 2, 1.5])
                         c1.markdown(f"**{row.get('Phone', 'N/A')}**")
                         times = [row.get('Time 1'), row.get('Time 2'), row.get('Time 3')]
                         times_str = ", ".join([t for t in times if t])
                         c2.caption(f"{row.get('Medicine', '')} ({times_str})")
-                        if c3.button(f"Remind", key=f"med_rem_today_{idx}"):
-                            msg = f"💊 Reminder: Time to take {row.get('Medicine', '')} ({row.get('Dosage', '')})"
-                            if send_whatsapp(clinic, row.get('Phone', ''), msg):
-                                st.success("Sent!")
-                            else:
-                                st.error("Failed")
+                        
+                        # Find matching Supabase record
+                        med_id = None
+                        if not reminders_supabase.empty:
+                            matching = reminders_supabase[
+                                (reminders_supabase['patient_phone'] == str(row.get('Phone'))) & 
+                                (reminders_supabase['item_name'] == str(row.get('Medicine'))) &
+                                (reminders_supabase['type'] == 'medication')
+                            ]
+                            if not matching.empty:
+                                med_id = matching.iloc[0]['id']
+
+                        with c3:
+                            rem_btn, comp_btn, miss_btn = st.columns(3)
+                            if rem_btn.button(f"📤", key=f"med_rem_btn_{idx}", help="Send WhatsApp Reminder"):
+                                msg = f"💊 Reminder: Time to take {row.get('Medicine', '')} ({row.get('Dosage', '')})"
+                                if send_whatsapp(clinic, row.get('Phone', ''), msg):
+                                    st.success("Sent!")
+                                else:
+                                    st.error("Failed")
+                                    
+                            if comp_btn.button(f"✅", key=f"med_comp_btn_{idx}", help="Mark as Completed"):
+                                # Update Sheet
+                                if update_medicine_status_in_sheet(clinic, row.get('Phone'), row.get('Medicine'), "Completed"):
+                                    # Update Supabase
+                                    if med_id: update_reminder_status_supabase(med_id, "Completed")
+                                    st.success("Marked Completed")
+                                    st.rerun()
+                                else:
+                                    st.error("Failed to update status")
+
+                            if miss_btn.button(f"❌", key=f"med_miss_btn_{idx}", help="Mark as Missed"):
+                                if update_medicine_status_in_sheet(clinic, row.get('Phone'), row.get('Medicine'), "Missed"):
+                                    if med_id: update_reminder_status_supabase(med_id, "Missed")
+                                    st.warning("Marked Missed")
+                                    st.rerun()
+                                else:
+                                    st.error("Failed to update status")
             else:
                 st.info("No medicine reminders due for today.")
         else:
@@ -1689,8 +1831,8 @@ else:
         if not clinic:
             st.error("Clinic not found. Contact admin.")
         else:
-            bookings, medicines, tests, followups = load_clinic_data(clinic, False)
-            show_clinic_dashboard(clinic, bookings, medicines, tests, followups)
+            bookings, medicines, tests, followups, reminders_df = load_clinic_data(clinic, False)
+            show_clinic_dashboard(clinic, bookings, medicines, tests, followups, reminders_df)
     else:
         st.error("Access denied. Contact admin.")
 
