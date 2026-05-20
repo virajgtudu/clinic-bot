@@ -48,6 +48,7 @@ def get_active_tests(clinic):
                     "Instructions": meta.get("instructions", "Follow prescribed precautions."),
                     "Date": datetime.strptime(start_date, "%Y-%m-%d").strftime("%d-%m-%Y"),
                     "Last Sent": meta.get("last_sent", ""),
+                    "times": r.get("times", []),
                     "source": "supabase"
                 })
         return active
@@ -84,34 +85,72 @@ def send_test_reminders():
             instr = t.get('Instructions', '')
             test_date = t.get('Date', '').replace("'", "")
             last_sent = str(t.get('Last Sent', ''))
+            reminder_times = t.get("times", [])
 
             msg = None
             type_sent = ""
 
-            if test_date == tomorrow_str and "tomorrow" not in last_sent.lower():
-                # 1 day before reminder
-                msg = (
-                    f"🧪 *Test Reminder (Tomorrow)*\n\n"
-                    f"Hi, this is a reminder that you have a test scheduled for tomorrow ({test_date}):\n\n"
-                    f"📋 Test: {test_name}\n"
-                    f"📝 Instructions: {instr}\n\n"
-                    f"Please follow the instructions carefully."
-                )
-                type_sent = "tomorrow"
-            elif test_date == today_str and current_hour < 11 and "today" not in last_sent.lower():
-                # Same day morning reminder
-                msg = (
-                    f"🧪 *Test Reminder (Today)*\n\n"
-                    f"Hi, this is a reminder for your scheduled test today ({test_date}):\n\n"
-                    f"📋 Test: {test_name}\n"
-                    f"📝 Instructions: {instr}\n\n"
-                    f"Please follow the instructions carefully."
-                )
-                type_sent = "today"
+            # Check for specific times first
+            if reminder_times:
+                for reminder_time in reminder_times:
+                    try:
+                        t_clean = str(reminder_time).strip().upper()
+                        if not t_clean: continue
+                        
+                        if "AM" in t_clean or "PM" in t_clean:
+                            parsed_time = datetime.strptime(t_clean, "%I:%M %p")
+                        elif ":" in t_clean:
+                            parsed_time = datetime.strptime(t_clean, "%H:%M")
+                        else: continue
+                        
+                        reminder_hour = parsed_time.hour
+                        reminder_minute = parsed_time.minute
+                        
+                        dose_id = f"{test_date}@{reminder_hour:02d}:{reminder_minute:02d}"
+                        
+                        current_time = get_now()
+                        is_past_time = (current_time.hour > reminder_hour or 
+                                      (current_time.hour == reminder_hour and current_time.minute >= reminder_minute))
+                        
+                        if is_past_time and dose_id not in last_sent:
+                            msg = (
+                                f"🧪 *Test Reminder*\n\n"
+                                f"Hi, this is a reminder for your scheduled test today ({test_date}) at {t_clean}:\n\n"
+                                f"📋 Test: {test_name}\n"
+                                f"📝 Instructions: {instr}\n\n"
+                                f"Please follow the instructions carefully."
+                            )
+                            type_sent = dose_id
+                            break # Send one reminder per pulse
+                    except Exception as te:
+                        print(f"      ⚠️ Test time parse error for '{reminder_time}': {te}")
+            
+            # Fallback to default morning alerts if no specific time triggered
+            if not msg:
+                if test_date == tomorrow_str and "tomorrow" not in last_sent.lower():
+                    # 1 day before reminder
+                    msg = (
+                        f"🧪 *Test Reminder (Tomorrow)*\n\n"
+                        f"Hi, this is a reminder that you have a test scheduled for tomorrow ({test_date}):\n\n"
+                        f"📋 Test: {test_name}\n"
+                        f"📝 Instructions: {instr}\n\n"
+                        f"Please follow the instructions carefully."
+                    )
+                    type_sent = "tomorrow"
+                elif test_date == today_str and current_hour < 11 and "today" not in last_sent.lower():
+                    # Same day morning reminder
+                    msg = (
+                        f"🧪 *Test Reminder (Today)*\n\n"
+                        f"Hi, this is a reminder for your scheduled test today ({test_date}):\n\n"
+                        f"📋 Test: {test_name}\n"
+                        f"📝 Instructions: {instr}\n\n"
+                        f"Please follow the instructions carefully."
+                    )
+                    type_sent = "today"
 
             if msg and send_whatsapp(clinic, phone, msg):
                 try:
-                    new_val = f"{type_sent} ({get_now().strftime('%d-%m-%Y %H:%M')})"
+                    new_val = f"{last_sent},{type_sent} ({get_now().strftime('%d-%m-%Y %H:%M')})".strip(",")
                     if t.get("source") == "supabase":
                         db = get_db()
                         # Fetch current metadata
@@ -430,6 +469,7 @@ def get_active_followups(clinic):
                     "Item": r["item_name"],
                     "Date": start_date,
                     "Last Sent": meta.get("last_sent", ""),
+                    "times": r.get("times", []),
                     "source": "supabase"
                 })
         return active
@@ -463,26 +503,66 @@ def send_followup_reminders():
             name = f.get('Patient Name', 'Patient')
             reason = f.get('Item', 'Follow-up')
             last_sent = str(f.get('Last Sent', ''))
+            reminder_times = f.get("times", [])
+            f_date = f.get('Date', '')
 
-            # Only send if not already sent today
-            if today_date_str not in last_sent:
+            msg = None
+            type_sent = ""
+
+            # Check for specific times first
+            if reminder_times:
+                for reminder_time in reminder_times:
+                    try:
+                        t_clean = str(reminder_time).strip().upper()
+                        if not t_clean: continue
+                        
+                        if "AM" in t_clean or "PM" in t_clean:
+                            parsed_time = datetime.strptime(t_clean, "%I:%M %p")
+                        elif ":" in t_clean:
+                            parsed_time = datetime.strptime(t_clean, "%H:%M")
+                        else: continue
+                        
+                        reminder_hour = parsed_time.hour
+                        reminder_minute = parsed_time.minute
+                        
+                        dose_id = f"{f_date}@{reminder_hour:02d}:{reminder_minute:02d}"
+                        
+                        current_time = get_now()
+                        is_past_time = (current_time.hour > reminder_hour or 
+                                      (current_time.hour == reminder_hour and current_time.minute >= reminder_minute))
+                        
+                        if is_past_time and dose_id not in last_sent:
+                            msg = (
+                                f"👨‍⚕️ *Follow-up Reminder*\n\n"
+                                f"Hi {name}, this is a reminder for your scheduled follow-up today regarding:\n"
+                                f"📝 *{reason}*\n\n"
+                                f"Please contact the clinic if you have any questions or need to reschedule."
+                            )
+                            type_sent = dose_id
+                            break
+                    except Exception as te:
+                        print(f"      ⚠️ Follow-up time parse error for '{reminder_time}': {te}")
+            
+            # Fallback to default (once a day check) if no specific time set or triggered
+            if not msg and today_date_str not in last_sent:
                 msg = (
                     f"👨‍⚕️ *Follow-up Reminder*\n\n"
                     f"Hi {name}, this is a reminder for your scheduled follow-up today regarding:\n"
                     f"📝 *{reason}*\n\n"
                     f"Please contact the clinic if you have any questions or need to reschedule."
                 )
+                type_sent = today_date_str
 
-                if send_whatsapp(clinic, phone, msg):
-                    try:
-                        db = get_db()
-                        res = db.table("reminders").select("metadata").eq("id", f.get("id")).execute()
-                        meta = (res.data[0]["metadata"] if res.data else {}) or {}
-                        meta["last_sent"] = f"sent ({get_now().strftime('%d-%m-%Y %H:%M')})"
-                        db.table("reminders").update({"metadata": meta}).eq("id", f.get("id")).execute()
-                        print(f"      ✅ Sent follow-up to {phone}")
-                    except Exception as e:
-                        print(f"      ⚠️ Failed to update status: {e}")
+            if msg and send_whatsapp(clinic, phone, msg):
+                try:
+                    db = get_db()
+                    res = db.table("reminders").select("metadata").eq("id", f.get("id")).execute()
+                    meta = (res.data[0]["metadata"] if res.data else {}) or {}
+                    meta["last_sent"] = f"{last_sent},{type_sent} ({get_now().strftime('%d-%m-%Y %H:%M')})".strip(",")
+                    db.table("reminders").update({"metadata": meta}).eq("id", f.get("id")).execute()
+                    print(f"      ✅ Sent follow-up to {phone}")
+                except Exception as e:
+                    print(f"      ⚠️ Failed to update status: {e}")
 
 def run_scheduler(interval_minutes=1):
     """Run the scheduler continuously"""

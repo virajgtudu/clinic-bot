@@ -1259,6 +1259,7 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                                             "type": "test",
                                             "item_name": test_name,
                                             "start_date": db_date,
+                                            "times": [time_str] if time_str else [],
                                             "status": "Active",
                                             "metadata": {
                                                 "source": "dashboard",
@@ -1319,6 +1320,7 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                                             "type": "follow_up",
                                             "item_name": med_name,
                                             "start_date": db_date,
+                                            "times": [time1_str] if time1_str else [],
                                             "status": "Active",
                                             "metadata": {
                                                 "source": "dashboard",
