@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from routes.webhook import webhook_bp
-from scheduler import send_medicine_reminders, send_test_reminders, send_appointment_reminders
+from scheduler import send_medicine_reminders, send_test_reminders, send_appointment_reminders, send_followup_reminders
 from config import get_now
 
 
@@ -26,6 +26,9 @@ def run_scheduled_tasks():
         
         logging.info("Checking test reminders...")
         send_test_reminders()
+
+        logging.info("Checking follow-up reminders...")
+        send_followup_reminders()
         
         # Appointment reminders run once a day at 18:00 (6 PM) IST
         if now.hour == 18:

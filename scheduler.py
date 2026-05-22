@@ -84,11 +84,12 @@ def send_test_reminders():
             test_name = t.get('Test Name', '')
             instr = t.get('Instructions', '')
             test_date = t.get('Date', '').replace("'", "")
-            last_sent = str(t.get('Last Sent', ''))
+            last_sent = str(t.get('Last Sent', '') or '')
+            if last_sent == 'None': last_sent = ''
+            
             reminder_times = t.get("times", [])
 
-            msg = None
-            type_sent = ""
+            print(f"      Checking test: {test_name} for {phone} on {test_date}")
 
             # Check for specific times first
             if reminder_times:
@@ -275,12 +276,11 @@ def send_medicine_reminders():
         for med in medicines:
             phone = med.get('Phone', '')
             medicine_name = med.get('Medicine', '')
-            print(f"      - Processing {medicine_name} for {phone}")
-            
-            dosage = med.get('Dosage', '')
-            frequency = med.get('Frequency', '')
             instructions = med.get("Instructions", "")
-            last_sent = str(med.get("Last Sent", ""))
+            last_sent = str(med.get("Last Sent", "") or '')
+            if last_sent == 'None': last_sent = ''
+            
+            print(f"      - Processing {medicine_name} for {phone}")
             
             # Fallback to frequency-based defaults if no times configured
             reminder_times = med.get("times")
@@ -505,11 +505,13 @@ def send_followup_reminders():
                 phone = f.get('Phone', '')
                 name = f.get('Patient Name', 'Patient')
                 reason = f.get('Item', 'Follow-up')
-                last_sent = str(f.get('Last Sent', ''))
+                last_sent = str(f.get('Last Sent', '') or '')
+                if last_sent == 'None': last_sent = ''
+                
                 reminder_times = f.get("times", [])
                 f_date = f.get('Date', '')
                 
-                print(f"      Checking follow-up: {name} ({phone}) - Date: {f_date}, Last Sent: {last_sent}")
+                print(f"      Checking follow-up: {name} ({phone}) - Date: {f_date}, Times: {reminder_times}, Last Sent: {last_sent}")
 
                 msg = None
                 type_sent = ""

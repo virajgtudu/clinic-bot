@@ -415,16 +415,18 @@ def update_followup_status_in_sheet(clinic, phone, item_name, new_status):
 
 def send_whatsapp(clinic, phone, message, buttons=None):
     try:
+        from services.whatsapp import clean_phone_number
         token = get_access_token(clinic)
         if not token:
             st.error("WhatsApp Access Token is missing for this clinic. Please check your Render environment variables.")
             return False
             
-        logger.info(f"Manual WhatsApp attempt to {phone} for clinic {clinic.get('id')}")
+        clean_num = clean_phone_number(phone)
+        logger.info(f"Manual WhatsApp attempt to {clean_num} (original: {phone}) for clinic {clinic.get('id')}")
         if buttons:
-            send_buttons(clinic, phone, message, buttons)
+            send_buttons(clinic, clean_num, message, buttons)
         else:
-            send_text(clinic, phone, message)
+            send_text(clinic, clean_num, message)
         return True
     except Exception as e:
         logger.error(f"WhatsApp error: {e}")

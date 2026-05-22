@@ -24,12 +24,31 @@ def _messages_url(clinic):
     return f"https://graph.facebook.com/{GRAPH_API_VERSION}/{phone_number_id}/messages"
 
 
+def clean_phone_number(phone):
+    """Clean phone number to digits only, ensuring it has a country code (default 91)"""
+    if not phone:
+        return ""
+    # Remove all non-digits
+    digits = "".join(filter(str.isdigit, str(phone)))
+    # If it starts with 0, remove it
+    if digits.startswith("0"):
+        digits = digits[1:]
+    # If it's 10 digits, assume India (+91)
+    if len(digits) == 10:
+        digits = "91" + digits
+    return digits
+
+
 def send_message(clinic, payload):
     token = get_access_token(clinic)
     if not token:
         raise RuntimeError("Missing WhatsApp access token")
 
     phone_number_id = clinic.get("phone_number_id") or clinic.get("id")
+    # Clean the 'to' number
+    if "to" in payload:
+        payload["to"] = clean_phone_number(payload["to"])
+        
     to_phone = payload.get("to", "")
     message_type = payload.get("type", "")
     logger.info("Sending WhatsApp message type=%s from phone_number_id=%s to=%s", message_type, phone_number_id, to_phone)
