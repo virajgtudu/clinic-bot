@@ -1133,12 +1133,15 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
 
                             with c3:
                                 rem_btn, comp_btn, miss_btn = st.columns(3)
-                                if rem_btn.button(f"📤", key=f"fup_rem_btn_{idx}", help="Send WhatsApp Reminder"):
+                                if rem_btn.button(f"📤", key=f"fup_rem_btn_{idx}", help="Send Instant WhatsApp Reminder"):
                                     msg = f"🔄 Follow-up Reminder: Hi {row.get('Patient Name', 'Patient')}, this is a reminder for your follow-up regarding {row.get('Item', 'your visit')} scheduled for {row.get('Date', '')}."
+                                    st.toast(f"Sending reminder to {row.get('Phone')}...")
                                     if send_whatsapp(clinic, row.get('Phone', ''), msg):
-                                        st.success("Sent!")
+                                        st.success("✅ Reminder Sent!")
+                                        # Optional: We don't rerun here to allow the user to see the success message, 
+                                        # but the button is ready for another click if needed.
                                     else:
-                                        st.error("Failed")
+                                        st.error("❌ Delivery Failed")
                                         
                                 if comp_btn.button(f"✅", key=f"fup_comp_btn_{idx}", help="Mark as Completed"):
                                     if update_followup_status_in_sheet(clinic, row.get('Phone'), row.get('Item'), "Completed"):
@@ -1547,13 +1550,13 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
 
                         with c3:
                             rem_btn, comp_btn, miss_btn = st.columns(3)
-                            if rem_btn.button(f"📤", key=f"med_rem_btn_{idx}", help="Send WhatsApp Reminder"):
+                            if rem_btn.button(f"📤", key=f"med_rem_btn_{idx}", help="Send Instant WhatsApp Reminder"):
                                 msg = f"💊 Reminder: Hi, this is a reminder to take your medicine {row.get('Medicine', '')} ({row.get('Dosage', '')})."
+                                st.toast(f"Sending reminder to {row.get('Phone')}...")
                                 if send_whatsapp(clinic, row.get('Phone', ''), msg):
-                                    st.success("Sent!")
-                                    st.rerun() # Refresh to clear success message if needed, or just let it stay
+                                    st.success("✅ Reminder Sent!")
                                 else:
-                                    st.error("Failed")
+                                    st.error("❌ Delivery Failed")
                                     
                             if comp_btn.button(f"✅", key=f"med_comp_btn_{idx}", help="Mark as Completed"):
                                 # Update Sheet
