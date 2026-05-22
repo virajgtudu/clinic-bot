@@ -27,8 +27,9 @@ def load_all_bookings():
     
     for clinic in clinics:
         try:
-            if IS_LOCAL:
-                sheet = get_sheet_local(clinic["sheet_name"])
+            sheet_name = clinic.get("sheet_name")
+            if IS_LOCAL and sheet_name:
+                sheet = get_sheet_local(sheet_name)
                 records = sheet.get_all_records()
                 df = pd.DataFrame(records)
                 if not df.empty and 'Date' in df.columns:
@@ -37,7 +38,7 @@ def load_all_bookings():
                     mask = df['Date'].isna() & (raw_dates.astype(str).str.strip() != "")
                     if mask.any():
                         df.loc[mask, 'Date'] = pd.to_datetime(raw_dates[mask], dayfirst=True, errors='coerce').dt.strftime('%d-%m-%Y')
-                df['Clinic'] = clinic['name']
+                df['Clinic'] = clinic.get('name', 'Clinic')
                 all_bookings.append(df)
         except:
             pass
@@ -81,7 +82,9 @@ with tab1:
     
     if clinics:
         for clinic in clinics:
-            with st.expander(f"🏥 {clinic['name']} ({clinic.get('subscription_status', 'active').title()})"):
+            c_name = clinic.get('name', 'Clinic')
+            c_id = clinic.get('id', '')
+            with st.expander(f"🏥 {c_name} ({clinic.get('subscription_status', 'active').title()})"):
                 col1, col2, col3 = st.columns([2, 1, 1])
                 
                 with col1:
@@ -101,15 +104,15 @@ with tab1:
                         "Change Status",
                         ["active", "inactive", "trial"],
                         index=["active", "inactive", "trial"].index(status),
-                        key=f"status_{clinic['id']}"
+                        key=f"status_{c_id}"
                     )
                     if new_status != status:
-                        update_clinic(clinic["id"], {"subscription_status": new_status})
+                        update_clinic(c_id, {"subscription_status": new_status})
                         st.success("Updated!")
                         st.rerun()
                     
-                    if st.button("Delete", key=f"del_{clinic['id']}"):
-                        delete_clinic(clinic["id"])
+                    if st.button("Delete", key=f"del_{c_id}"):
+                        delete_clinic(c_id)
                         st.warning("Clinic deleted!")
                         st.rerun()
     else:

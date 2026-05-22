@@ -197,7 +197,9 @@ def _is_demo_row(row):
 
 
 def purge_demo_bookings(clinic):
-    sheet = get_sheet_local(clinic["sheet_name"])
+    s_name = clinic.get("sheet_name")
+    if not s_name: return 0
+    sheet = get_sheet_local(s_name)
     ensure_headers(sheet, BOOKING_HEADERS)
     rows = sheet.get_all_records()
     to_delete = [index for index, row in enumerate(rows, start=2) if _is_demo_row(row)]
@@ -209,12 +211,17 @@ def purge_demo_bookings(clinic):
 def update_booking_status_in_sheet(clinic, token, new_status):
     if not token:
         return False, "Missing token"
-    sheet = get_sheet_local(clinic["sheet_name"])
+
+    s_name = clinic.get("sheet_name")
+    if not s_name:
+        return False, "Clinic sheet not configured"
+
+    sheet = get_sheet_local(s_name)
     ensure_headers(sheet, BOOKING_HEADERS)
     rows = sheet.get_all_records()
     status_col = BOOKING_HEADERS.index("Status") + 1
     token_col = BOOKING_HEADERS.index("Token") + 1
-    
+
     # 1. Update in Sheet
     target_row = None
     for row_index, row in enumerate(rows, start=2):
@@ -222,52 +229,54 @@ def update_booking_status_in_sheet(clinic, token, new_status):
             sheet.update_cell(row_index, status_col, new_status)
             target_row = row
             break
-            
+
     if not target_row:
         # fallback for non-standard headers
-        cell = sheet.find(str(token), in_column=token_col)
-        if cell:
-            sheet.update_cell(cell.row, status_col, new_status)
-            # Try to get row data if possible, but finding a single cell doesn't give us the whole row easily here
-            # For now, if fallback is used, we might miss the Supabase sync or have less info
-            pass
-        else:
+        try:
+            cell = sheet.find(str(token), in_column=token_col)
+            if cell:
+                sheet.update_cell(cell.row, status_col, new_status)
+        except:
             return False, "Token not found"
 
     # 2. Update in Supabase
     try:
         db = get_db()
         if db and target_row:
-            doctor_id = target_row.get("Doctor")
+            doctor_name = target_row.get("Doctor")
             date_val = target_row.get("Date") # DD-MM-YYYY
-            
-            # Extract numeric token part from "VI-001"
+
+            # Find doctor ID by name
+            doctor_id = ""
+            for d in clinic.get("doctors", []):
+                if d["name"] == doctor_name:
+                    doctor_id = d["id"]
+                    break
+
+            if not doctor_id and clinic.get("doctors"):
+                doctor_id = clinic.get("doctors")[0].get("id")
+
+            # Extract numeric token part
             tk_str = str(token)
             if "-" in tk_str:
                 tk_num = int(tk_str.split("-")[-1])
             else:
                 tk_num = int(re.sub(r"\D", "", tk_str))
-                
+
             db_date = datetime.strptime(str(date_val), "%d-%m-%Y").strftime("%Y-%m-%d")
-            
-            # Find the record ID
-            response = db.table("appointments") \
-                .select("id") \
+
+            # Find the record and update
+            db.table("appointments") \
+                .update({"status": new_status}) \
                 .eq("clinic_id", clinic.get("phone_number_id") or clinic.get("id")) \
                 .eq("doctor_id", doctor_id) \
                 .eq("booking_date", db_date) \
                 .eq("token", tk_num) \
                 .execute()
-                
-            if response.data:
-                appt_id = response.data[0]["id"]
-                update_appointment_status(appt_id, new_status)
     except Exception as e:
         logger.error(f"Failed to sync status to Supabase: {e}")
-        # We don't fail the whole operation if Supabase sync fails, but we log it.
 
     return True, None
-
 
 def load_clinic_data(clinic, demo_mode=False):
     if demo_mode or not IS_LOCAL:
@@ -279,40 +288,44 @@ def load_clinic_data(clinic, demo_mode=False):
     followups = pd.DataFrame()
 
     try:
-        bookings_sheet = get_sheet_local(clinic["sheet_name"])
-        ensure_headers(bookings_sheet, BOOKING_HEADERS)
-        records = bookings_sheet.get_all_records()
-        bookings = pd.DataFrame(records)
-        if not bookings.empty:
-            if "Name" in bookings.columns:
-                bookings = bookings[bookings["Name"].astype(str).str.strip() != ""]
-            bookings = bookings[~bookings.apply(_is_demo_row, axis=1)]
-            if "Booked At" in bookings.columns:
-                bookings['Booked At DT'] = pd.to_datetime(bookings['Booked At'], dayfirst=True, errors='coerce')
-                bookings = bookings.sort_values("Booked At DT", ascending=True).drop(columns=['Booked At DT'])
-            
-            if "Date" in bookings.columns:
-                raw_dates = bookings['Date'].copy()
-                # 1. Try DD-MM-YYYY (Our new standard)
-                bookings['Date'] = pd.to_datetime(raw_dates, dayfirst=True, errors='coerce').dt.strftime('%d-%m-%Y')
+        s_name = clinic.get("sheet_name")
+        if s_name:
+            bookings_sheet = get_sheet_local(s_name)
+            ensure_headers(bookings_sheet, BOOKING_HEADERS)
+            records = bookings_sheet.get_all_records()
+            bookings = pd.DataFrame(records)
+            if not bookings.empty:
+                if "Name" in bookings.columns:
+                    bookings = bookings[bookings["Name"].astype(str).str.strip() != ""]
+                bookings = bookings[~bookings.apply(_is_demo_row, axis=1)]
+                if "Booked At" in bookings.columns:
+                    bookings['Booked At DT'] = pd.to_datetime(bookings['Booked At'], dayfirst=True, errors='coerce')
+                    bookings = bookings.sort_values("Booked At DT", ascending=True).drop(columns=['Booked At DT'])
                 
-                # 2. If any failed (older data), try standard ISO YYYY-MM-DD
-                mask = bookings['Date'].isna() & (raw_dates.astype(str).str.strip() != "")
-                if mask.any():
-                    bookings.loc[mask, 'Date'] = pd.to_datetime(raw_dates[mask], format='%Y-%m-%d', errors='coerce').dt.strftime('%d-%m-%Y')
-                
-                # 3. Last fallback for M/D/YYYY
-                mask = bookings['Date'].isna() & (raw_dates.astype(str).str.strip() != "")
-                if mask.any():
-                    bookings.loc[mask, 'Date'] = pd.to_datetime(raw_dates[mask], dayfirst=False, errors='coerce').dt.strftime('%d-%m-%Y')
+                if "Date" in bookings.columns:
+                    raw_dates = bookings['Date'].copy()
+                    # 1. Try DD-MM-YYYY (Our new standard)
+                    bookings['Date'] = pd.to_datetime(raw_dates, dayfirst=True, errors='coerce').dt.strftime('%d-%m-%Y')
+                    
+                    # 2. If any failed (older data), try standard ISO YYYY-MM-DD
+                    mask = bookings['Date'].isna() & (raw_dates.astype(str).str.strip() != "")
+                    if mask.any():
+                        bookings.loc[mask, 'Date'] = pd.to_datetime(raw_dates[mask], format='%Y-%m-%d', errors='coerce').dt.strftime('%d-%m-%Y')
+                    
+                    # 3. Last fallback for M/D/YYYY
+                    mask = bookings['Date'].isna() & (raw_dates.astype(str).str.strip() != "")
+                    if mask.any():
+                        bookings.loc[mask, 'Date'] = pd.to_datetime(raw_dates[mask], dayfirst=False, errors='coerce').dt.strftime('%d-%m-%Y')
     except Exception as e:
         st.warning(f"Bookings sheet load issue: {e}")
 
     try:
-        medicines_sheet = get_sheet_local(clinic["medicines_sheet"])
-        ensure_headers(medicines_sheet, MEDICINE_HEADERS)
-        med_records = medicines_sheet.get_all_records()
-        medicines = pd.DataFrame(med_records)
+        m_sheet_name = clinic.get("medicines_sheet")
+        if m_sheet_name:
+            medicines_sheet = get_sheet_local(m_sheet_name)
+            ensure_headers(medicines_sheet, MEDICINE_HEADERS)
+            med_records = medicines_sheet.get_all_records()
+            medicines = pd.DataFrame(med_records)
     except Exception as e:
         st.warning(f"Medicines sheet load issue: {e}")
 
@@ -342,8 +355,7 @@ def load_clinic_data(clinic, demo_mode=False):
     return bookings, medicines, tests, followups, reminders_df
 
 
-    def update_reminder_status_supabase(reminder_id, status):
-
+def update_reminder_status_supabase(reminder_id, status):
     """Helper to update status in Supabase for all reminder types"""
     try:
         db = get_db()
@@ -422,11 +434,12 @@ def send_whatsapp(clinic, phone, message, buttons=None):
 def load_all_bookings():
     all_bookings = []
     clinics = get_all_clinics()
-    
+
     for clinic in clinics:
         try:
-            if IS_LOCAL:
-                sheet = get_sheet_local(clinic["sheet_name"])
+            s_name = clinic.get("sheet_name")
+            if IS_LOCAL and s_name:
+                sheet = get_sheet_local(s_name)
                 ensure_headers(sheet, BOOKING_HEADERS)
                 records = sheet.get_all_records()
                 df = pd.DataFrame(records)
@@ -438,11 +451,10 @@ def load_all_bookings():
                         mask = df['Date'].isna() & (raw_dates.astype(str).str.strip() != "")
                         if mask.any():
                             df.loc[mask, 'Date'] = pd.to_datetime(raw_dates[mask], dayfirst=True, errors='coerce').dt.strftime('%d-%m-%Y')
-                df['Clinic'] = clinic['name']
-                all_bookings.append(df)
+                    df['Clinic'] = clinic.get('name', 'Clinic')
+                    all_bookings.append(df)
         except:
             pass
-    
     if all_bookings:
         return pd.concat(all_bookings, ignore_index=True)
     return pd.DataFrame()
@@ -473,7 +485,7 @@ def show_admin_panel():
             for clinic in clinics:
                 phone_id = clinic.get("phone_number_id") or clinic.get("id")
                 
-                with st.expander(f"🏥 {clinic['name']} ({clinic.get('subscription_status', 'active').title()})"):
+                with st.expander(f"🏥 {clinic.get('name', 'Clinic')} ({clinic.get('subscription_status', 'active').title()})"):
                     col1, col2, col3 = st.columns([2, 1, 1])
                     
                     with col1:
@@ -687,7 +699,7 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
     next_week = [(get_now() + timedelta(days=i)).strftime("%d-%m-%Y") for i in range(7)]
     
     with st.sidebar:
-        st.markdown(f"## 🏥 {clinic['name']}")
+        st.markdown(f"## 🏥 {clinic.get('name', 'Clinic')}")
         st.caption(f"Subscription: {clinic.get('subscription_status', 'active').title()}")
         
         if IS_LOCAL:
@@ -807,8 +819,12 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                     if st.button("⏭️ Next Patient", use_container_width=True, help="Mark current as Completed and next as Serving"):
                         # Logic: Find current 'Serving', mark Completed. Find first 'Pending', mark Serving.
                         try:
-                            # We need the most recent data from the sheet for this
-                            sheet = get_sheet_local(clinic["sheet_name"])
+                            s_name = clinic.get("sheet_name")
+                            if not s_name:
+                                st.error("Clinic sheet not configured")
+                            else:
+                                # We need the most recent data from the sheet for this
+                                sheet = get_sheet_local(s_name)
                             records = sheet.get_all_records()
 
                             serving_token = None
@@ -898,7 +914,7 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                                     st.success(f"Updated!")
                                     st.rerun()
                                 else:
-                                    st.error("Failed")
+                                    st.error(f"Failed: {err}")
                         
                         with c8:
                             with st.popover("🔄", help="Set Re-visit"):
@@ -1088,48 +1104,57 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
             st.dataframe(tests, use_container_width=True, hide_index=True)
         with rtab3:
             if not followups.empty:
-                # Filter for today or active followups
-                st.info(f"🔄 {len(followups)} active follow-up reminders")
-                for idx, row in followups.head(20).iterrows():
-                    with st.container(border=True):
-                        c1, c2, c3 = st.columns([2, 2, 1.5])
-                        c1.markdown(f"**{row.get('Phone', 'N/A')}**\n{row.get('Patient Name', 'Patient')}")
-                        c2.caption(f"📅 {row.get('Date', 'N/A')}\n📝 {row.get('Item', 'Follow-up')}")
-                        
-                        # Find matching Supabase record
-                        f_id = None
-                        if not reminders_supabase.empty:
-                            matching = reminders_supabase[
-                                (reminders_supabase['patient_phone'] == str(row.get('Phone'))) & 
-                                (reminders_supabase['type'] == 'follow_up')
-                            ]
-                            if not matching.empty:
-                                f_id = matching.iloc[0]['id']
+                # Filter for non-completed followups to keep the list clean
+                active_fups = followups[followups['Status'].isin(['Pending', 'Active', 'Missed'])] if 'Status' in followups.columns else followups
+                
+                if not active_fups.empty:
+                    st.info(f"🔄 {len(active_fups)} active follow-up reminders")
+                    for idx, row in active_fups.head(20).iterrows():
+                        with st.container(border=True):
+                            c1, c2, c3 = st.columns([2, 2, 1.5])
+                            
+                            status = row.get('Status', 'Pending')
+                            status_color = "orange" if status == "Pending" else "red" if status == "Missed" else "blue"
+                            
+                            c1.markdown(f"**{row.get('Phone', 'N/A')}**\n{row.get('Patient Name', 'Patient')}")
+                            c2.markdown(f"📅 {row.get('Date', 'N/A')} (:{status_color}[{status}])\n📝 {row.get('Item', 'Follow-up')}")
+                            
+                            # Find matching Supabase record
+                            f_id = None
+                            if not reminders_supabase.empty:
+                                matching = reminders_supabase[
+                                    (reminders_supabase['patient_phone'] == str(row.get('Phone'))) & 
+                                    (reminders_supabase['type'] == 'follow_up')
+                                ]
+                                if not matching.empty:
+                                    f_id = matching.iloc[0]['id']
 
-                        with c3:
-                            rem_btn, comp_btn, miss_btn = st.columns(3)
-                            if rem_btn.button(f"📤", key=f"fup_rem_btn_{idx}", help="Send WhatsApp Reminder"):
-                                msg = f"🔄 Follow-up Reminder: Hi {row.get('Patient Name', 'Patient')}, this is a reminder for your follow-up regarding {row.get('Item', 'your visit')} scheduled for {row.get('Date', '')}."
-                                if send_whatsapp(clinic, row.get('Phone', ''), msg):
-                                    st.success("Sent!")
-                                else:
-                                    st.error("Failed")
-                                    
-                            if comp_btn.button(f"✅", key=f"fup_comp_btn_{idx}", help="Mark as Completed"):
-                                if update_followup_status_in_sheet(clinic, row.get('Phone'), row.get('Item'), "Completed"):
-                                    if f_id: update_reminder_status_supabase(f_id, "Completed")
-                                    st.success("Completed")
-                                    st.rerun()
-                                else:
-                                    st.error("Failed")
+                            with c3:
+                                rem_btn, comp_btn, miss_btn = st.columns(3)
+                                if rem_btn.button(f"📤", key=f"fup_rem_btn_{idx}", help="Send WhatsApp Reminder"):
+                                    msg = f"🔄 Follow-up Reminder: Hi {row.get('Patient Name', 'Patient')}, this is a reminder for your follow-up regarding {row.get('Item', 'your visit')} scheduled for {row.get('Date', '')}."
+                                    if send_whatsapp(clinic, row.get('Phone', ''), msg):
+                                        st.success("Sent!")
+                                    else:
+                                        st.error("Failed")
+                                        
+                                if comp_btn.button(f"✅", key=f"fup_comp_btn_{idx}", help="Mark as Completed"):
+                                    if update_followup_status_in_sheet(clinic, row.get('Phone'), row.get('Item'), "Completed"):
+                                        if f_id: update_reminder_status_supabase(f_id, "Completed")
+                                        st.success("Completed")
+                                        st.rerun()
+                                    else:
+                                        st.error("Failed")
 
-                            if miss_btn.button(f"❌", key=f"fup_miss_btn_{idx}", help="Mark as Missed"):
-                                if update_followup_status_in_sheet(clinic, row.get('Phone'), row.get('Item'), "Missed"):
-                                    if f_id: update_reminder_status_supabase(f_id, "Missed")
-                                    st.warning("Missed")
-                                    st.rerun()
-                                else:
-                                    st.error("Failed")
+                                if miss_btn.button(f"❌", key=f"fup_miss_btn_{idx}", help="Mark as Missed"):
+                                    if update_followup_status_in_sheet(clinic, row.get('Phone'), row.get('Item'), "Missed"):
+                                        if f_id: update_reminder_status_supabase(f_id, "Missed")
+                                        st.warning("Missed")
+                                        st.rerun()
+                                    else:
+                                        st.error("Failed")
+                else:
+                    st.success("All follow-ups completed! ✅")
             else:
                 st.info("No active follow-ups found.")
         
@@ -1495,10 +1520,14 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
             
             if not active_today.empty:
                 st.info(f"💊 {len(active_today)} patients have medicine reminders for today")
-                for idx, row in active_today.head(10).iterrows():
+                for idx, row in active_today.iterrows():
                     with st.container(border=True):
                         c1, c2, c3 = st.columns([2, 2, 1.5])
-                        c1.markdown(f"**{row.get('Phone', 'N/A')}**")
+                        
+                        status = row.get('Status', 'Active')
+                        status_color = "green" if status == "Active" else "blue" if status == "Completed" else "red"
+                        
+                        c1.markdown(f"**{row.get('Phone', 'N/A')}** (:{status_color}[{status}])")
                         times = [row.get('Time 1'), row.get('Time 2'), row.get('Time 3')]
                         times_str = ", ".join([t for t in times if t])
                         c2.caption(f"{row.get('Medicine', '')} ({times_str})")
@@ -1517,9 +1546,10 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                         with c3:
                             rem_btn, comp_btn, miss_btn = st.columns(3)
                             if rem_btn.button(f"📤", key=f"med_rem_btn_{idx}", help="Send WhatsApp Reminder"):
-                                msg = f"💊 Reminder: Time to take {row.get('Medicine', '')} ({row.get('Dosage', '')})"
+                                msg = f"💊 Reminder: Hi, this is a reminder to take your medicine {row.get('Medicine', '')} ({row.get('Dosage', '')})."
                                 if send_whatsapp(clinic, row.get('Phone', ''), msg):
                                     st.success("Sent!")
+                                    st.rerun() # Refresh to clear success message if needed, or just let it stay
                                 else:
                                     st.error("Failed")
                                     
@@ -1528,18 +1558,18 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                                 if update_medicine_status_in_sheet(clinic, row.get('Phone'), row.get('Medicine'), "Completed"):
                                     # Update Supabase
                                     if med_id: update_reminder_status_supabase(med_id, "Completed")
-                                    st.success("Marked Completed")
+                                    st.success("Completed")
                                     st.rerun()
                                 else:
-                                    st.error("Failed to update status")
+                                    st.error("Failed")
 
                             if miss_btn.button(f"❌", key=f"med_miss_btn_{idx}", help="Mark as Missed"):
                                 if update_medicine_status_in_sheet(clinic, row.get('Phone'), row.get('Medicine'), "Missed"):
                                     if med_id: update_reminder_status_supabase(med_id, "Missed")
-                                    st.warning("Marked Missed")
+                                    st.warning("Missed")
                                     st.rerun()
                                 else:
-                                    st.error("Failed to update status")
+                                    st.error("Failed")
             else:
                 st.info("No medicine reminders due for today.")
         else:
@@ -1560,7 +1590,7 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
             )
             
             if st.form_submit_button("💾 Save Changes"):
-                update_clinic(clinic["id"], {
+                update_clinic(clinic.get("id"), {
                     "name": c_name,
                     "phone": c_phone,
                     "address": c_address,
@@ -1612,7 +1642,7 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                         
                         if st.button("🗑️ Remove", key=f"del_doctor_{i}"):
                             new_doctors = [d for j, d in enumerate(doctors) if j != i]
-                            update_clinic(clinic["id"], {"doctors": new_doctors})
+                            update_clinic(clinic.get("id"), {"doctors": new_doctors})
                             st.success("Doctor removed!")
                             st.rerun()
                     
@@ -1679,7 +1709,7 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                                     "slots": e_slots,
                                     "availability": e_avail_data
                                 }
-                                update_clinic(clinic["id"], {"doctors": doctors})
+                                update_clinic(clinic.get("id"), {"doctors": doctors})
                                 sync_doctor_sessions(clinic, doctors[i])
                                 st.session_state[f"editing_doctor_{i}"] = False
                                 st.success("Doctor updated and availability synced to Calendar!")
@@ -1754,7 +1784,7 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                         "availability": avail_data
                     }
                     updated_doctors = doctors + [new_doctor]
-                    update_clinic(clinic["id"], {"doctors": updated_doctors})
+                    update_clinic(clinic.get("id"), {"doctors": updated_doctors})
                     sync_doctor_sessions(clinic, new_doctor)
                     st.success(f"Doctor {d_name} added and availability synced!")
                     st.rerun()
@@ -1771,7 +1801,7 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                     st.write(f"**Instructions:** {test['instructions']}")
                     if st.button("🗑️ Remove", key=f"del_test_{i}"):
                         new_tests = [t for j, t in enumerate(tests) if j != i]
-                        update_clinic(clinic["id"], {"tests": new_tests})
+                        update_clinic(clinic.get("id"), {"tests": new_tests})
                         st.success("Test removed!")
                         st.rerun()
         
@@ -1791,7 +1821,7 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                         "instructions": t_instructions
                     }
                     updated_tests = tests + [new_test]
-                    update_clinic(clinic["id"], {"tests": updated_tests})
+                    update_clinic(clinic.get("id"), {"tests": updated_tests})
                     st.success(f"Test {t_name} added!")
                     st.rerun()
 

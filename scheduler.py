@@ -496,15 +496,19 @@ def send_followup_reminders():
         status = clinic.get("subscription_status")
         if status and status not in ["active", "trial"]:
             continue
+        try:
+            followups = get_active_followups(clinic)
+            print(f"   Found {len(followups)} active follow-ups for {clinic.get('name')}")
+            for f in followups:
+                phone = f.get('Phone', '')
+                name = f.get('Patient Name', 'Patient')
+                reason = f.get('Item', 'Follow-up')
+                last_sent = str(f.get('Last Sent', ''))
+                reminder_times = f.get("times", [])
+                f_date = f.get('Date', '')
+                
+                print(f"      Checking follow-up: {name} ({phone}) - Date: {f_date}, Last Sent: {last_sent}")
 
-        followups = get_active_followups(clinic)
-        for f in followups:
-            phone = f.get('Phone', '')
-            name = f.get('Patient Name', 'Patient')
-            reason = f.get('Item', 'Follow-up')
-            last_sent = str(f.get('Last Sent', ''))
-            reminder_times = f.get("times", [])
-            f_date = f.get('Date', '')
 
             msg = None
             type_sent = ""
