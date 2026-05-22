@@ -496,9 +496,11 @@ def send_followup_reminders():
         status = clinic.get("subscription_status")
         if status and status not in ["active", "trial"]:
             continue
+            
         try:
             followups = get_active_followups(clinic)
             print(f"   Found {len(followups)} active follow-ups for {clinic.get('name')}")
+            
             for f in followups:
                 phone = f.get('Phone', '')
                 name = f.get('Patient Name', 'Patient')
@@ -509,64 +511,65 @@ def send_followup_reminders():
                 
                 print(f"      Checking follow-up: {name} ({phone}) - Date: {f_date}, Last Sent: {last_sent}")
 
+                msg = None
+                type_sent = ""
 
-            msg = None
-            type_sent = ""
+                # Check for specific times first
+                if reminder_times:
+                    for reminder_time in reminder_times:
+                        try:
+                            t_clean = str(reminder_time).strip().upper()
+                            if not t_clean: continue
+                            
+                            if "AM" in t_clean or "PM" in t_clean:
+                                parsed_time = datetime.strptime(t_clean, "%I:%M %p")
+                            elif ":" in t_clean:
+                                parsed_time = datetime.strptime(t_clean, "%H:%M")
+                            else: continue
+                            
+                            reminder_hour = parsed_time.hour
+                            reminder_minute = parsed_time.minute
+                            
+                            dose_id = f"{f_date}@{reminder_hour:02d}:{reminder_minute:02d}"
+                            
+                            current_time = get_now()
+                            is_past_time = (current_time.hour > reminder_hour or 
+                                          (current_time.hour == reminder_hour and current_time.minute >= reminder_minute))
+                            
+                            if is_past_time and dose_id not in last_sent:
+                                msg = (
+                                    f"👨‍⚕️ *Follow-up Reminder*\n\n"
+                                    f"Hi {name}, this is a reminder for your scheduled follow-up today regarding:\n"
+                                    f"📝 *{reason}*\n\n"
+                                    f"Please contact the clinic if you have any questions or need to reschedule."
+                                )
+                                type_sent = dose_id
+                                break
+                        except Exception as te:
+                            print(f"      ⚠️ Follow-up time parse error for '{reminder_time}': {te}")
+                
+                # Fallback to default (once a day check) if no specific time set or triggered
+                if not msg and today_date_str not in last_sent:
+                    msg = (
+                        f"👨‍⚕️ *Follow-up Reminder*\n\n"
+                        f"Hi {name}, this is a reminder for your scheduled follow-up today regarding:\n"
+                        f"📝 *{reason}*\n\n"
+                        f"Please contact the clinic if you have any questions or need to reschedule."
+                    )
+                    type_sent = today_date_str
 
-            # Check for specific times first
-            if reminder_times:
-                for reminder_time in reminder_times:
+                if msg and send_whatsapp(clinic, phone, msg):
                     try:
-                        t_clean = str(reminder_time).strip().upper()
-                        if not t_clean: continue
-                        
-                        if "AM" in t_clean or "PM" in t_clean:
-                            parsed_time = datetime.strptime(t_clean, "%I:%M %p")
-                        elif ":" in t_clean:
-                            parsed_time = datetime.strptime(t_clean, "%H:%M")
-                        else: continue
-                        
-                        reminder_hour = parsed_time.hour
-                        reminder_minute = parsed_time.minute
-                        
-                        dose_id = f"{f_date}@{reminder_hour:02d}:{reminder_minute:02d}"
-                        
-                        current_time = get_now()
-                        is_past_time = (current_time.hour > reminder_hour or 
-                                      (current_time.hour == reminder_hour and current_time.minute >= reminder_minute))
-                        
-                        if is_past_time and dose_id not in last_sent:
-                            msg = (
-                                f"👨‍⚕️ *Follow-up Reminder*\n\n"
-                                f"Hi {name}, this is a reminder for your scheduled follow-up today regarding:\n"
-                                f"📝 *{reason}*\n\n"
-                                f"Please contact the clinic if you have any questions or need to reschedule."
-                            )
-                            type_sent = dose_id
-                            break
-                    except Exception as te:
-                        print(f"      ⚠️ Follow-up time parse error for '{reminder_time}': {te}")
-            
-            # Fallback to default (once a day check) if no specific time set or triggered
-            if not msg and today_date_str not in last_sent:
-                msg = (
-                    f"👨‍⚕️ *Follow-up Reminder*\n\n"
-                    f"Hi {name}, this is a reminder for your scheduled follow-up today regarding:\n"
-                    f"📝 *{reason}*\n\n"
-                    f"Please contact the clinic if you have any questions or need to reschedule."
-                )
-                type_sent = today_date_str
-
-            if msg and send_whatsapp(clinic, phone, msg):
-                try:
-                    db = get_db()
-                    res = db.table("reminders").select("metadata").eq("id", f.get("id")).execute()
-                    meta = (res.data[0]["metadata"] if res.data else {}) or {}
-                    meta["last_sent"] = f"{last_sent},{type_sent} ({get_now().strftime('%d-%m-%Y %H:%M')})".strip(",")
-                    db.table("reminders").update({"metadata": meta}).eq("id", f.get("id")).execute()
-                    print(f"      ✅ Sent follow-up to {phone}")
-                except Exception as e:
-                    print(f"      ⚠️ Failed to update status: {e}")
+                        db = get_db()
+                        res = db.table("reminders").select("metadata").eq("id", f.get("id")).execute()
+                        meta = (res.data[0]["metadata"] if res.data else {}) or {}
+                        meta["last_sent"] = f"{last_sent},{type_sent} ({get_now().strftime('%d-%m-%Y %H:%M')})".strip(",")
+                        db.table("reminders").update({"metadata": meta}).eq("id", f.get("id")).execute()
+                        print(f"      ✅ Sent follow-up to {phone}")
+                    except Exception as e:
+                        print(f"      ⚠️ Failed to update status: {e}")
+        except Exception as e:
+            print(f"Error processing follow-ups for clinic {clinic.get('name')}: {e}")
 
 def run_scheduler(interval_minutes=1):
     """Run the scheduler continuously"""
