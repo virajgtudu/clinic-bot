@@ -28,8 +28,13 @@ def clean_phone_number(phone):
     """Clean phone number to digits only, ensuring it has a country code (default 91)"""
     if not phone:
         return ""
+    # Convert to string and handle potential float representations from pandas (e.g., '9876543210.0')
+    phone_str = str(phone)
+    if phone_str.endswith(".0"):
+        phone_str = phone_str[:-2]
+        
     # Remove all non-digits
-    digits = "".join(filter(str.isdigit, str(phone)))
+    digits = "".join(filter(str.isdigit, phone_str))
     # If it starts with 0, remove it
     if digits.startswith("0"):
         digits = digits[1:]
