@@ -116,6 +116,32 @@ def confirm_walkin():
         return jsonify({"error": str(e)}), 500
 
 
+@webhook_bp.route("/webhook/manual-remind", methods=["POST", "OPTIONS"])
+def manual_remind():
+    if request.method == "OPTIONS":
+        return jsonify({}), 200
+        
+    data = request.get_json(silent=True) or {}
+    phone = data.get("phone")
+    message = data.get("message")
+    clinic_id = data.get("clinic_id")
+
+    if not all([phone, message, clinic_id]):
+        return jsonify({"error": "Missing parameters"}), 400
+
+    clinic = get_clinic_by_phone_id(clinic_id)
+    if not clinic:
+        return jsonify({"error": "Clinic not found"}), 404
+
+    try:
+        from services.whatsapp import send_text
+        send_text(clinic, phone, message)
+        return jsonify({"status": "sent"}), 200
+    except Exception as e:
+        current_app.logger.error(f"Failed to send manual reminder: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @webhook_bp.route("/webhook", methods=["GET"])
 def verify_webhook():
     mode = request.args.get("hub.mode")

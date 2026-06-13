@@ -41,6 +41,11 @@ def run_scheduled_tasks():
 
 def create_app():
     flask_app = Flask(__name__)
+    try:
+        from flask_cors import CORS
+        CORS(flask_app)
+    except ImportError:
+        pass
     flask_app.register_blueprint(webhook_bp)
 
     @flask_app.get("/")
