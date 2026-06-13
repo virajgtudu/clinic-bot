@@ -53,8 +53,9 @@ export function RemindersView() {
     try {
       // Determine API URL based on where frontend is running. If no VITE_API_URL is set,
       // fallback to localhost:5000 for local dev or use the same host for production
-      const apiUrl = import.meta.env.VITE_API_URL || 
+      const rawApiUrl = import.meta.env.VITE_API_URL || 
         (window.location.hostname === 'localhost' ? 'http://localhost:5000' : 'https://' + window.location.host);
+      const apiUrl = rawApiUrl.endsWith('/') ? rawApiUrl.slice(0, -1) : rawApiUrl;
 
       const messageType = reminder.type.replace('_', ' ');
       const message = `🔄 Reminder: Hi ${reminder.patient_name || 'Patient'}, this is a manual reminder for your ${messageType} regarding ${reminder.item_name}.`;

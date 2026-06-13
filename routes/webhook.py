@@ -116,7 +116,7 @@ def confirm_walkin():
         return jsonify({"error": str(e)}), 500
 
 
-@webhook_bp.route("/webhook/manual-remind", methods=["POST", "OPTIONS"])
+@webhook_bp.route("/webhook/manual-remind", methods=["POST"])
 def manual_remind():
     data = request.get_json(silent=True) or {}
     phone = data.get("phone")
