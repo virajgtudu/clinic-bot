@@ -59,7 +59,8 @@ export function RemindersView() {
       const messageType = reminder.type.replace('_', ' ');
       const message = `🔄 Reminder: Hi ${reminder.patient_name || 'Patient'}, this is a manual reminder for your ${messageType} regarding ${reminder.item_name}.`;
 
-      const response = await fetch(`${apiUrl}/webhook/manual-remind`, {
+      const endpoint = `${apiUrl}/webhook/manual-remind`;
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -70,13 +71,15 @@ export function RemindersView() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to send reminder via API');
+        const errorText = await response.text();
+        throw new Error(`Server returned ${response.status}: ${errorText}`);
       }
 
       alert(`✅ Reminder successfully sent to ${reminder.patient_name || 'Patient'}!`);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Manual remind error:', err);
-      alert('❌ Failed to send WhatsApp reminder. Please make sure the backend is running and the 24-hour limit hasn\'t passed.');
+      const apiUrl = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:5000' : 'https://' + window.location.host);
+      alert(`❌ Failed to send WhatsApp reminder.\n\nAttempted URL: ${apiUrl}/webhook/manual-remind\nError Details: ${err.message}`);
     }
   };
 
