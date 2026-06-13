@@ -118,9 +118,6 @@ def confirm_walkin():
 
 @webhook_bp.route("/webhook/manual-remind", methods=["POST", "OPTIONS"])
 def manual_remind():
-    if request.method == "OPTIONS":
-        return jsonify({}), 200
-        
     data = request.get_json(silent=True) or {}
     phone = data.get("phone")
     message = data.get("message")

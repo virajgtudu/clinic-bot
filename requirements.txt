@@ -10,3 +10,4 @@ pandas
 apscheduler
 supabase
 pytz
+flask-cors
