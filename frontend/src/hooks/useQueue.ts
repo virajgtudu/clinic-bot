@@ -61,7 +61,7 @@ export function useQueue() {
           booking_time: appt.booking_time || '',
           status: dbStatus === 'pending' ? 'waiting' : dbStatus as any,
           source: appt.source === 'walkin' ? 'walk-in' : 'whatsapp',
-          wait_time_mins: calculateWaitTime(appt.created_at),
+          wait_time_mins: calculateWaitTime(appt.booking_date, appt.booking_time, appt.created_at),
           doctor_id: appt.doctor_id,
           created_at: appt.created_at
         };
@@ -182,8 +182,47 @@ export function useQueue() {
   return { queue, loading, markCompleted, callNext, prioritize, addWalkIn };
 }
 
-function calculateWaitTime(createdAt: string) {
-  const start = new Date(createdAt).getTime();
-  const now = new Date().getTime();
-  return Math.floor((now - start) / (1000 * 60));
+function parseBookingTime(bookingDate: string, bookingTime: string): Date | null {
+  if (!bookingTime) return null;
+  try {
+    const match = bookingTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (!match) return null;
+
+    let [_, hoursStr, minutesStr, ampm] = match;
+    let hours = parseInt(hoursStr, 10);
+    const minutes = parseInt(minutesStr, 10);
+
+    if (ampm.toUpperCase() === 'PM' && hours < 12) {
+      hours += 12;
+    } else if (ampm.toUpperCase() === 'AM' && hours === 12) {
+      hours = 0;
+    }
+
+    const [year, month, day] = bookingDate.split('-').map(Number);
+    return new Date(year, month - 1, day, hours, minutes, 0, 0);
+  } catch (err) {
+    console.error('Error parsing booking time:', bookingTime, err);
+    return null;
+  }
+}
+
+function calculateWaitTime(bookingDate: string, bookingTime: string, createdAt: string) {
+  if (bookingTime && bookingDate) {
+    const parsed = parseBookingTime(bookingDate, bookingTime);
+    if (parsed) {
+      const start = parsed.getTime();
+      const now = new Date().getTime();
+      const diff = Math.floor((now - start) / (1000 * 60));
+      return diff > 0 ? diff : 0;
+    }
+  }
+  
+  try {
+    const start = new Date(createdAt).getTime();
+    const now = new Date().getTime();
+    const diff = Math.floor((now - start) / (1000 * 60));
+    return diff > 0 ? diff : 0;
+  } catch (e) {
+    return 0;
+  }
 }

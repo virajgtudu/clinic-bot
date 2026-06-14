@@ -71,8 +71,9 @@ export default function Dashboard() {
   const servingPatient = queue.find(p => p.status === 'serving');
   const servingToken = servingPatient ? servingPatient.token : '---';
 
-  const avgWaitTime = queue.length > 0 
-    ? Math.round(queue.reduce((acc, p) => acc + (p.wait_time_mins || 0), 0) / queue.length)
+  const activeWaiting = queue.filter(p => p.status === 'waiting' || p.status === 'emergency');
+  const avgWaitTime = activeWaiting.length > 0 
+    ? Math.round(activeWaiting.reduce((acc, p) => acc + (p.wait_time_mins || 0), 0) / activeWaiting.length)
     : 0;
 
   const handleSignOut = async () => {
