@@ -24,9 +24,9 @@ def _find_patient_details(clinic_id, phone):
     try:
         db = get_db()
         if db:
-            res = db.table("appointments").select("patient_name, patient_age").eq("phone", phone).order("created_at", descending=True).limit(1).execute()
+            res = db.table("appointments").select("patient_name, age").eq("phone", phone).order("created_at", desc=True).limit(1).execute()
             if res.data:
-                return res.data[0].get("patient_name"), res.data[0].get("patient_age")
+                return res.data[0].get("patient_name"), res.data[0].get("age")
     except Exception as e:
         logger.error(f"Error looking up patient details: {e}")
     return None, None
@@ -1234,10 +1234,35 @@ def handle_message(clinic, message):
         if _handle_staff_flow(clinic, phone, text, raw_text, key, session):
             return
 
+    # Check greeting early to reset any stuck session states (e.g. followup_prompt)
+    if text in {"hi", "hello", "start", "menu"}:
+        user_sessions[key] = {"step": "main_menu", "clinic_id": clinic_id, "phone": phone}
+        _show_main_menu(clinic, phone)
+        return
+
     # Handle follow-up reminder prompts
     active_followup = _get_active_followup_reminder(clinic_id, phone)
-    is_fup_book = text in {"1", "book", "1️⃣ book follow-up appointment", "1 book follow-up appointment"} or text == "book" or "book follow" in text or text.startswith("1")
-    is_fup_res = text in {"2", "cancel", "2️⃣ cancel follow-up", "2 cancel follow-up"} or text == "cancel" or "cancel" in text or text.startswith("2")
+    
+    # Explicit follow-up intent
+    is_explicit_fup_book = (
+        "book follow-up" in text or 
+        "book follow up" in text or 
+        ("1" in text and "follow" in text) or
+        text in {"1️⃣ book follow-up appointment", "1 book follow-up appointment"}
+    )
+    is_explicit_fup_res = (
+        "cancel follow-up" in text or 
+        "cancel follow up" in text or 
+        ("2" in text and "follow" in text) or
+        text in {"2️⃣ cancel follow-up", "2 cancel follow-up"}
+    )
+
+    if step == "followup_prompt":
+        is_fup_book = is_explicit_fup_book or text in {"1", "book", "yes"} or text.startswith("1")
+        is_fup_res = is_explicit_fup_res or text in {"2", "cancel", "no"} or text.startswith("2")
+    else:
+        is_fup_book = is_explicit_fup_book
+        is_fup_res = is_explicit_fup_res
 
     if (active_followup and (is_fup_book or is_fup_res)) or step == "followup_prompt":
         if is_fup_book:
@@ -1335,11 +1360,6 @@ def handle_message(clinic, message):
     if text == "reminders" or step.startswith("patient_rem_"):
         if _handle_patient_reminder_flow(clinic, phone, text, raw_text, key, session):
             return
-
-    if text in {"hi", "hello", "start", "menu"}:
-        user_sessions[key] = {"step": "main_menu", "clinic_id": clinic_id, "phone": phone}
-        _show_main_menu(clinic, phone)
-        return
 
     is_followup_booking = (
         "book follow-up" in text or 
