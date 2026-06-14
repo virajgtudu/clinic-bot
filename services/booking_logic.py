@@ -120,6 +120,85 @@ def reschedule_followup(clinic, phone, days):
         return False, str(e)
 
 
+def cancel_followup_in_sheets(clinic, phone):
+    try:
+        from services.sheets import open_sheet
+        followup_sheet_name = f"{clinic.get('name', 'clinic').lower().replace(' ', '_')}_followup"
+        sheet = open_sheet(followup_sheet_name)
+        rows = sheet.get_all_records()
+        headers = sheet.row_values(1)
+        
+        status_col = headers.index("Status") + 1
+        
+        for idx, row in enumerate(rows, start=2):
+            if str(row.get("Phone", "")).strip() == str(phone).strip() and \
+               row.get("Status", "").strip().lower() in {"pending", "active"}:
+                sheet.update_cell(idx, status_col, "Cancelled")
+                return True
+        return False
+    except Exception as e:
+        logger.error(f"Error updating followup status to Cancelled in sheet: {e}")
+        return False
+
+
+def cancel_followup(clinic, phone):
+    clinic_id = clinic.get("phone_number_id") or clinic.get("id")
+    try:
+        db = get_db()
+        if not db:
+            return False, "Database not available"
+        
+        # 1. Fetch active follow_up reminder from Supabase
+        response = db.table("reminders") \
+            .select("*") \
+            .eq("clinic_id", str(clinic_id)) \
+            .eq("patient_phone", phone) \
+            .eq("type", "follow_up") \
+            .eq("status", "Active") \
+            .execute()
+            
+        if not response.data:
+            return False, "No active follow-up reminder found"
+            
+        reminder = response.data[0]
+        reminder_id = reminder["id"]
+        
+        # Update Supabase
+        db.table("reminders") \
+            .update({"status": "Cancelled"}) \
+            .eq("id", reminder_id) \
+            .execute()
+            
+        # Update Google Sheets
+        cancel_followup_in_sheets(clinic, phone)
+        
+        return True, "Success"
+    except Exception as e:
+        logger.error(f"Error cancelling follow-up: {e}")
+        return False, str(e)
+
+
+def complete_followup_in_sheets(clinic, phone):
+    try:
+        from services.sheets import open_sheet
+        followup_sheet_name = f"{clinic.get('name', 'clinic').lower().replace(' ', '_')}_followup"
+        sheet = open_sheet(followup_sheet_name)
+        rows = sheet.get_all_records()
+        headers = sheet.row_values(1)
+        
+        status_col = headers.index("Status") + 1
+        
+        for idx, row in enumerate(rows, start=2):
+            if str(row.get("Phone", "")).strip() == str(phone).strip() and \
+               row.get("Status", "").strip().lower() in {"pending", "active"}:
+                sheet.update_cell(idx, status_col, "Completed")
+                return True
+        return False
+    except Exception as e:
+        logger.error(f"Error updating followup status to Completed in sheet: {e}")
+        return False
+
+
 def _force_24h_time(raw_time: str) -> str:
     """
     Surgically extracts and normalizes time to HH:MM (24h).
@@ -1158,9 +1237,9 @@ def handle_message(clinic, message):
     # Handle follow-up reminder prompts
     active_followup = _get_active_followup_reminder(clinic_id, phone)
     is_fup_book = text in {"1", "book", "1️⃣ book follow-up appointment", "1 book follow-up appointment"} or text == "book" or "book follow" in text or text.startswith("1")
-    is_fup_res = text in {"2", "reschedule", "2️⃣ reschedule follow-up appointment", "2 reschedule follow-up appointment"} or text == "reschedule" or "reschedule follow" in text or text.startswith("2")
+    is_fup_res = text in {"2", "cancel", "2️⃣ cancel follow-up", "2 cancel follow-up"} or text == "cancel" or "cancel" in text or text.startswith("2")
 
-    if (active_followup and (is_fup_book or is_fup_res)) or step in {"followup_prompt", "followup_reschedule_menu"}:
+    if (active_followup and (is_fup_book or is_fup_res)) or step == "followup_prompt":
         if is_fup_book:
             doctors = get_doctors(clinic_id) or clinic.get("doctors", [])
             if not doctors:
@@ -1210,51 +1289,19 @@ def handle_message(clinic, message):
             return
             
         elif is_fup_res:
-            p_name = active_followup.get("patient_name") if active_followup else session.get("patient_name", "Patient")
-            user_sessions[key] = {
-                "step": "followup_reschedule_menu",
-                "clinic_id": clinic_id,
-                "phone": phone,
-                "patient_name": p_name,
-            }
-            send_buttons(
-                clinic,
-                phone,
-                "When would you like to reschedule your follow-up reminder to?",
-                [
-                    {"id": "res_3", "title": "In 3 Days"},
-                    {"id": "res_7", "title": "In 7 Days"},
-                    {"id": "res_14", "title": "In 14 Days"},
-                ]
-            )
-            return
-            
-        elif step == "followup_reschedule_menu":
-            days = None
-            if "3" in text or text == "res_3":
-                days = 3
-            elif "7" in text or text == "res_7":
-                days = 7
-            elif "14" in text or text == "res_14":
-                days = 14
-                
-            if days is None:
-                send_text(clinic, phone, "Invalid selection. Please choose when to reschedule:\n- Reply 3 for 3 Days\n- Reply 7 for 7 Days\n- Reply 14 for 14 Days")
-                return
-                
-            success, new_date = reschedule_followup(clinic, phone, days)
+            success, err = cancel_followup(clinic, phone)
             if success:
-                send_text(clinic, phone, f"✅ Your follow-up reminder has been rescheduled. We will remind you on *{new_date}*.")
+                send_text(clinic, phone, "❌ Your follow-up reminder has been cancelled successfully.")
                 user_sessions[key] = {"step": "main_menu", "clinic_id": clinic_id, "phone": phone}
                 _show_main_menu(clinic, phone)
             else:
-                send_text(clinic, phone, f"❌ Failed to reschedule: {new_date}. Please contact the clinic.")
+                send_text(clinic, phone, f"❌ Failed to cancel follow-up: {err}. Please contact the clinic.")
                 user_sessions[key] = {"step": "main_menu", "clinic_id": clinic_id, "phone": phone}
                 _show_main_menu(clinic, phone)
             return
         
         elif step == "followup_prompt":
-            send_text(clinic, phone, "To book your follow-up appointment, please reply with *1*.\nTo reschedule it to another date, please reply with *2*.")
+            send_text(clinic, phone, "To book your follow-up appointment, please reply with *1*.\nTo cancel it, please reply with *2*.")
             return
     
     if text == "status":
@@ -1558,6 +1605,17 @@ def handle_message(clinic, message):
             )
         except Exception as exc:
             print(f"Calendar event skipped for clinic {clinic_id}: {exc}")
+
+        # Mark active follow-up reminder as completed
+        try:
+            active_fup = _get_active_followup_reminder(clinic_id, phone)
+            if active_fup:
+                db = get_db()
+                if db:
+                    db.table("reminders").update({"status": "Completed"}).eq("id", active_fup["id"]).execute()
+                complete_followup_in_sheets(clinic, phone)
+        except Exception as fup_err:
+            logger.error(f"Error completing follow-up reminder on booking: {fup_err}")
 
         user_sessions.pop(key, None)
         send_buttons(

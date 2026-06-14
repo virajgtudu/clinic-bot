@@ -542,7 +542,7 @@ def send_followup_reminders():
                     f"👨⚕️ Doctor: {doctor_name}\n\n"
                     f"To schedule your follow-up, reply with:\n\n"
                     f"1️⃣ Book Follow-up Appointment\n"
-                    f"2️⃣ Reschedule Follow-up Appointment\n\n"
+                    f"2️⃣ Cancel Follow-up\n\n"
                     f"Need assistance? Simply reply to this message.\n\n"
                     f"Thank you,\n"
                     f"*{clinic_name}*"
