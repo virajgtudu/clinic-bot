@@ -16,8 +16,12 @@ import { cn } from '../lib/utils';
 import { useReminders } from '../hooks/useReminders';
 import type { Reminder } from '../hooks/useReminders';
 import { CreateReminderModal } from './CreateReminderModal';
+import { useAuth } from './AuthContext';
+import { useDoctors } from '../hooks/useDoctors';
 
 export function RemindersView() {
+  const { profile } = useAuth();
+  const { doctors = [] } = useDoctors();
   const { reminders = [], analytics, loading, cancelReminder, addReminder, updateReminderStatus } = useReminders();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [filter, setFilter] = useState<'all' | 'medication' | 'test' | 'follow_up' | 'today_follow_up'>('all');
@@ -57,8 +61,43 @@ export function RemindersView() {
         (window.location.hostname === 'localhost' ? 'http://localhost:5000' : 'https://' + window.location.host);
       const apiUrl = rawApiUrl.endsWith('/') ? rawApiUrl.slice(0, -1) : rawApiUrl;
 
-      const messageType = reminder.type.replace('_', ' ');
-      const message = `🔄 Reminder: Hi ${reminder.patient_name || 'Patient'}, this is a manual reminder for your ${messageType} regarding ${reminder.item_name}.`;
+      let message = '';
+      if (reminder.type === 'follow_up') {
+        const clinicName = profile?.full_name || 'Clinic';
+        const docName = reminder.metadata?.doctor_name || (doctors.length > 0 ? doctors[0].name : '');
+        const docPrefix = docName ? (docName.startsWith('Dr.') ? docName : `Dr. ${docName}`) : 'your doctor';
+        
+        let displayDate = reminder.start_date;
+        try {
+          const parts = reminder.start_date.split('-');
+          if (parts.length === 3) {
+            displayDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+          }
+        } catch (e) {}
+
+        message = `🏥 *${clinicName} Follow-up Reminder*
+
+Hello *${reminder.patient_name || 'Patient'}*,
+
+This is a friendly reminder that your follow-up consultation with *${docPrefix}* is due on *${displayDate}*.
+
+Regular follow-ups help your doctor monitor your progress and ensure your treatment is working effectively.
+
+📅 Follow-up Date: ${displayDate}
+👨⚕️ Doctor: ${docPrefix}
+
+To book your follow-up appointment, reply with:
+
+1️⃣ Book Follow-up Appointment
+
+Need assistance? Simply reply to this message.
+
+Thank you,
+*${clinicName}*`;
+      } else {
+        const messageType = reminder.type.replace('_', ' ');
+        message = `🔄 Reminder: Hi ${reminder.patient_name || 'Patient'}, this is a manual reminder for your ${messageType} regarding ${reminder.item_name}.`;
+      }
 
       const endpoint = `${apiUrl}/webhook/manual-remind`;
       const response = await fetch(endpoint, {
