@@ -19,9 +19,58 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../lib/utils';
 import { usePatients } from '../hooks/usePatients';
 import type { PatientRecord } from '../hooks/usePatients';
+import { useDoctors } from '../hooks/useDoctors';
+import { useReminders } from '../hooks/useReminders';
+import { useAuth } from './AuthContext';
+import { FollowUpModal } from './FollowUpModal';
 
 export function PatientsView() {
   const { patients, loading, stats, fetchPatients, getPatientHistory } = usePatients();
+  const { doctors } = useDoctors();
+  const { addReminder } = useReminders();
+  const { profile } = useAuth();
+  const [isFollowUpOpen, setIsFollowUpOpen] = useState(false);
+
+  const getDoctorName = (id: string) => {
+    const doctor = doctors.find(d => d.id === id);
+    return doctor ? doctor.name : (id || 'Primary Physician');
+  };
+
+  const handleSendWhatsApp = async () => {
+    if (!selectedPatient) return;
+    const message = prompt(
+      `Enter custom WhatsApp message to send to ${selectedPatient.name}:`,
+      `Hello ${selectedPatient.name}, this is a message from ${profile?.full_name || 'ClinicPRO'}.`
+    );
+    if (!message) return;
+
+    try {
+      const rawApiUrl = import.meta.env.VITE_API_URL || 
+        (window.location.hostname === 'localhost' ? 'http://localhost:5000' : 'https://' + window.location.host);
+      const apiUrl = rawApiUrl.endsWith('/') ? rawApiUrl.slice(0, -1) : rawApiUrl;
+
+      const endpoint = `${apiUrl}/webhook/manual-remind`;
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clinic_id: selectedPatient.clinic_id || profile?.clinic_id,
+          phone: selectedPatient.phone,
+          message: message
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Server returned ${response.status}: ${errorText}`);
+      }
+
+      alert(`✅ Message successfully sent to ${selectedPatient.name}!`);
+    } catch (err: any) {
+      console.error('Send WhatsApp error:', err);
+      alert(`❌ Failed to send WhatsApp message.\n\nError Details: ${err.message}`);
+    }
+  };
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPatient, setSelectedPatient] = useState<PatientRecord | null>(null);
   const [history, setHistory] = useState<any[]>([]);
@@ -266,7 +315,7 @@ export function PatientsView() {
                              <div className="flex items-center gap-4">
                                <div className="flex-1">
                                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Consulting Doctor</p>
-                                 <p className="text-sm font-bold dark:text-slate-200">{h.doctor_id || 'Primary Physician'}</p>
+                                 <p className="text-sm font-bold dark:text-slate-200">{getDoctorName(h.doctor_id)}</p>
                                </div>
                                <div className="w-10 h-10 rounded-xl bg-white dark:bg-slate-800 flex items-center justify-center text-slate-300 group-hover:text-brand-500 transition-colors shadow-sm">
                                  <FileText size={18} />
@@ -282,10 +331,16 @@ export function PatientsView() {
 
               {/* Panel Footer */}
               <div className="p-8 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-4 bg-slate-50/50 dark:bg-slate-900/30">
-                <button className="flex-1 py-4 bg-white dark:bg-slate-800 text-slate-600 dark:text-white font-black text-xs uppercase tracking-widest rounded-2xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 transition-all active:scale-95 shadow-sm">
+                <button 
+                  onClick={handleSendWhatsApp}
+                  className="flex-1 py-4 bg-white dark:bg-slate-800 text-slate-600 dark:text-white font-black text-xs uppercase tracking-widest rounded-2xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 transition-all active:scale-95 shadow-sm outline-none focus-visible:ring-4 focus-visible:ring-slate-500/50"
+                >
                   Send WhatsApp
                 </button>
-                <button className="flex-1 py-4 bg-brand-500 text-white font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-brand-600 transition-all shadow-lg shadow-brand-500/25 active:scale-95">
+                <button 
+                  onClick={() => setIsFollowUpOpen(true)}
+                  className="flex-1 py-4 bg-brand-500 text-white font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-brand-600 transition-all shadow-lg shadow-brand-500/25 active:scale-95 outline-none focus-visible:ring-4 focus-visible:ring-brand-500/50"
+                >
                   Book Follow-up
                 </button>
               </div>
@@ -293,6 +348,48 @@ export function PatientsView() {
           </>
         )}
       </AnimatePresence>
+
+      <FollowUpModal
+        isOpen={isFollowUpOpen}
+        onClose={() => setIsFollowUpOpen(false)}
+        patientName={selectedPatient?.name || ''}
+        patientPhone={selectedPatient?.phone || ''}
+        onSubmit={async (days) => {
+          if (!selectedPatient) return;
+          
+          const phone = selectedPatient.phone;
+          const name = selectedPatient.name;
+
+          const start = new Date();
+          start.setDate(start.getDate() + days);
+          const dateStr = start.toISOString().split('T')[0];
+          
+          const lastDoctorId = history.length > 0 ? history[0].doctor_id : '';
+          const doctorName = getDoctorName(lastDoctorId);
+
+          try {
+            await addReminder({
+              patient_name: name,
+              patient_phone: phone,
+              type: 'follow_up',
+              item_name: `General Follow-up (${days} days)`,
+              frequency: 'Once',
+              duration_days: 1,
+              start_date: dateStr,
+              end_date: dateStr,
+              times: ['08:00'],
+              metadata: {
+                doctor_name: doctorName
+              }
+            });
+            alert('✅ Follow-up scheduled successfully.');
+            setIsFollowUpOpen(false);
+          } catch (err) {
+            console.error('Failed to schedule follow-up:', err);
+            alert('❌ Failed to schedule follow-up. Please try again.');
+          }
+        }}
+      />
     </div>
   );
 }

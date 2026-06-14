@@ -147,25 +147,29 @@ export function CreateReminderModal({ isOpen, onClose, onSubmit }: CreateReminde
           {/* Patient Selection */}
           <div className="space-y-4">
             <div className="space-y-2">
-              <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-                <User size={14} />
+              <label htmlFor="patientId" className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2 cursor-pointer">
+                <User size={14} aria-hidden="true" />
                 Patient ID (Optional)
               </label>
               <div className="relative group">
                 <Search className={cn(
                   "absolute left-4 top-1/2 -translate-y-1/2 transition-colors",
                   isSearching ? "text-brand-500" : "text-slate-400 group-focus-within:text-brand-500"
-                )} size={20} />
+                )} size={20} aria-hidden="true" />
                 <input 
+                  id="patientId"
+                  name="patientId"
                   type="text" 
-                  placeholder="e.g. PID-1001"
-                  className="w-full pl-12 pr-12 py-4 bg-slate-100/50 dark:bg-slate-800/50 border-none rounded-2xl focus:ring-2 focus:ring-brand-500/20 dark:text-white font-bold uppercase"
+                  placeholder="e.g. PID-1001…"
+                  className="w-full pl-12 pr-12 py-4 bg-slate-100/50 dark:bg-slate-800/50 border-none rounded-2xl focus:ring-2 focus:ring-brand-500/20 dark:text-white font-bold uppercase outline-none"
                   value={patientIdInput}
                   onChange={e => setPatientIdInput(e.target.value)}
+                  autoComplete="off"
+                  spellCheck={false}
                 />
                 {isSearching && (
                   <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                    <Loader2 className="animate-spin text-brand-500" size={20} />
+                    <Loader2 className="animate-spin text-brand-500" size={20} aria-hidden="true" />
                   </div>
                 )}
               </div>
@@ -174,49 +178,62 @@ export function CreateReminderModal({ isOpen, onClose, onSubmit }: CreateReminde
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Patient Name</label>
+                <label htmlFor="patientName" className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1 cursor-pointer">Patient Name</label>
                 <input 
+                  id="patientName"
+                  name="patientName"
                   required
                   type="text" 
-                  placeholder="Full Name"
-                  className="w-full px-6 py-4 bg-slate-100/50 dark:bg-slate-800/50 border-none rounded-2xl focus:ring-2 focus:ring-brand-500/20 dark:text-white font-bold"
+                  placeholder="Full Name… e.g. John Doe"
+                  className="w-full px-6 py-4 bg-slate-100/50 dark:bg-slate-800/50 border-none rounded-2xl focus:ring-2 focus:ring-brand-500/20 dark:text-white font-bold outline-none"
                   value={formData.patient_name}
                   onChange={e => setFormData({ ...formData, patient_name: e.target.value })}
+                  autoComplete="name"
+                  spellCheck={false}
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Phone Number</label>
+                <label htmlFor="patientPhone" className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1 cursor-pointer">Phone Number</label>
                 <input 
+                  id="patientPhone"
+                  name="patientPhone"
                   required
                   type="tel" 
-                  placeholder="91XXXXXXXXXX"
-                  className="w-full px-6 py-4 bg-slate-100/50 dark:bg-slate-800/50 border-none rounded-2xl focus:ring-2 focus:ring-brand-500/20 dark:text-white font-bold"
+                  placeholder="e.g. 919876543210…"
+                  className="w-full px-6 py-4 bg-slate-100/50 dark:bg-slate-800/50 border-none rounded-2xl focus:ring-2 focus:ring-brand-500/20 dark:text-white font-bold outline-none"
                   value={formData.patient_phone}
                   onChange={e => setFormData({ ...formData, patient_phone: e.target.value })}
+                  autoComplete="tel"
                 />
               </div>
             </div>
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">
+            <label htmlFor="itemName" className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1 cursor-pointer">
               {type === 'medication' ? 'Medicine Name' : type === 'test' ? 'Test Name' : 'Follow-up Reason'}
             </label>
             <input 
+              id="itemName"
+              name="itemName"
               required
               type="text" 
-              placeholder={type === 'medication' ? "Paracetamol 500mg" : "Full Body Checkup"}
-              className="w-full px-6 py-4 bg-slate-100/50 dark:bg-slate-800/50 border-none rounded-2xl focus:ring-2 focus:ring-brand-500/20 dark:text-white font-bold"
+              placeholder={type === 'medication' ? "e.g. Paracetamol 500mg…" : "e.g. Full Body Checkup…"}
+              className="w-full px-6 py-4 bg-slate-100/50 dark:bg-slate-800/50 border-none rounded-2xl focus:ring-2 focus:ring-brand-500/20 dark:text-white font-bold outline-none"
               value={formData.item_name}
               onChange={e => setFormData({ ...formData, item_name: e.target.value })}
+              autoComplete="off"
+              spellCheck={false}
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="space-y-2">
-              <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Frequency</label>
+              <label htmlFor="frequency" className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1 cursor-pointer">Frequency</label>
               <select 
-                className="w-full px-6 py-4 bg-slate-100/50 dark:bg-slate-800/50 border-none rounded-2xl focus:ring-2 focus:ring-brand-500/20 dark:text-white font-bold appearance-none"
+                id="frequency"
+                name="frequency"
+                className="w-full px-6 py-4 bg-slate-100/50 dark:bg-slate-800/50 border-none rounded-2xl focus:ring-2 focus:ring-brand-500/20 dark:text-white font-bold appearance-none cursor-pointer outline-none"
                 value={formData.frequency}
                 onChange={e => setFormData({ ...formData, frequency: e.target.value })}
               >
@@ -226,21 +243,26 @@ export function CreateReminderModal({ isOpen, onClose, onSubmit }: CreateReminde
               </select>
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Duration (Days)</label>
+              <label htmlFor="durationDays" className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1 cursor-pointer">Duration (Days)</label>
               <input 
+                id="durationDays"
+                name="durationDays"
                 type="number" 
                 min="1"
                 max="30"
-                className="w-full px-6 py-4 bg-slate-100/50 dark:bg-slate-800/50 border-none rounded-2xl focus:ring-2 focus:ring-brand-500/20 dark:text-white font-bold"
+                className="w-full px-6 py-4 bg-slate-100/50 dark:bg-slate-800/50 border-none rounded-2xl focus:ring-2 focus:ring-brand-500/20 dark:text-white font-bold outline-none"
                 value={formData.duration_days}
                 onChange={e => setFormData({ ...formData, duration_days: Number(e.target.value) })}
+                inputMode="numeric"
               />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Start Date</label>
+              <label htmlFor="startDate" className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1 cursor-pointer">Start Date</label>
               <input 
+                id="startDate"
+                name="startDate"
                 type="date" 
-                className="w-full px-6 py-4 bg-slate-100/50 dark:bg-slate-800/50 border-none rounded-2xl focus:ring-2 focus:ring-brand-500/20 dark:text-white font-bold"
+                className="w-full px-6 py-4 bg-slate-100/50 dark:bg-slate-800/50 border-none rounded-2xl focus:ring-2 focus:ring-brand-500/20 dark:text-white font-bold outline-none cursor-pointer"
                 value={formData.start_date}
                 onChange={e => setFormData({ ...formData, start_date: e.target.value })}
               />
@@ -249,24 +271,25 @@ export function CreateReminderModal({ isOpen, onClose, onSubmit }: CreateReminde
 
           <div className="space-y-4">
             <div className="flex items-center justify-between ml-1">
-              <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Daily Alert Times</label>
+              <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Daily Alert Times</span>
               {formData.times.length < 3 && (
-                <button type="button" onClick={addTime} className="text-brand-500 text-xs font-black uppercase tracking-wider hover:underline">+ Add Time</button>
+                <button type="button" onClick={addTime} className="text-brand-500 text-xs font-black uppercase tracking-wider hover:underline focus-visible:ring-2 focus-visible:ring-brand-500/50 rounded outline-none">+ Add Time</button>
               )}
             </div>
             <div className="flex flex-wrap gap-4">
               {formData.times.map((time, index) => (
-                <div key={index} className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 p-2 rounded-xl group">
-                  <Clock size={16} className="text-slate-400" />
+                <div key={index} className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 p-2 rounded-xl group focus-within:ring-2 focus-within:ring-brand-500/50">
+                  <Clock size={16} className="text-slate-400" aria-hidden="true" />
                   <input 
                     type="time" 
-                    className="bg-transparent border-none p-0 text-sm font-bold dark:text-white focus:ring-0"
+                    aria-label={`Daily Alert Time ${index + 1}`}
+                    className="bg-transparent border-none p-0 text-sm font-bold dark:text-white focus:ring-0 outline-none cursor-pointer"
                     value={time}
                     onChange={e => updateTime(index, e.target.value)}
                   />
                   {formData.times.length > 1 && (
-                    <button type="button" onClick={() => removeTime(index)} className="text-slate-300 hover:text-red-500">
-                      <X size={16} />
+                    <button type="button" onClick={() => removeTime(index)} className="text-slate-300 hover:text-red-500 focus-visible:ring-2 focus-visible:ring-rose-500 rounded outline-none" aria-label={`Remove Alert Time ${index + 1}`}>
+                      <X size={16} aria-hidden="true" />
                     </button>
                   )}
                 </div>
@@ -278,16 +301,16 @@ export function CreateReminderModal({ isOpen, onClose, onSubmit }: CreateReminde
             <button 
               type="button"
               onClick={onClose}
-              className="flex-1 py-4 rounded-2xl font-black text-slate-500 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 transition-colors"
+              className="flex-1 py-4 rounded-2xl font-black text-slate-500 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 focus-visible:ring-4 focus-visible:ring-slate-500/50 outline-none transition-colors"
             >
               CANCEL
             </button>
             <button 
               type="submit"
               disabled={submitting}
-              className="flex-[2] py-4 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-2xl font-black transition-all shadow-lg shadow-brand-500/25 flex items-center justify-center gap-2"
+              className="flex-[2] py-4 bg-brand-500 hover:bg-brand-600 focus-visible:ring-4 focus-visible:ring-brand-500/50 disabled:opacity-50 text-white rounded-2xl font-black transition-all shadow-lg shadow-brand-500/25 flex items-center justify-center gap-2 outline-none"
             >
-              {submitting ? 'CREATING...' : 'CREATE REMINDER'}
+              {submitting ? 'CREATING…' : 'CREATE REMINDER'}
             </button>
           </div>
         </form>

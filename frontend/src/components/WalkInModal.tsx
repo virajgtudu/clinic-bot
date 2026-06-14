@@ -145,7 +145,7 @@ export function WalkInModal({ isOpen, onClose, onSubmit, doctors }: WalkInModalP
 
             <div className="flex items-center gap-4 mb-8">
               <div className="w-12 h-12 bg-brand-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-brand-500/20">
-                <UserPlus size={24} />
+                <UserPlus size={24} aria-hidden="true" />
               </div>
               <div>
                 <h3 className="text-xl font-black dark:text-white">Add Walk-in</h3>
@@ -156,48 +156,60 @@ export function WalkInModal({ isOpen, onClose, onSubmit, doctors }: WalkInModalP
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Patient Full Name</label>
+                  <label htmlFor="patientName" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1 cursor-pointer">Patient Full Name</label>
                   <input
+                    id="patientName"
+                    name="patientName"
                     autoFocus
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="Enter patient name..."
-                    className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-transparent focus:border-brand-500/30 focus:bg-white dark:focus:bg-slate-900 rounded-2xl text-sm font-bold transition-all outline-none dark:text-white"
+                    placeholder="Enter patient name… e.g. John Doe"
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-transparent focus:border-brand-500/30 focus:bg-white dark:focus:bg-slate-900 rounded-2xl text-sm font-bold transition-all outline-none focus:ring-2 focus:ring-brand-500/20 dark:text-white"
                     required
+                    autoComplete="name"
+                    spellCheck={false}
                   />
                 </div>
                 
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Age</label>
+                  <label htmlFor="age" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1 cursor-pointer">Age</label>
                   <input
+                    id="age"
+                    name="age"
                     type="number"
                     value={age}
                     onChange={(e) => setAge(e.target.value)}
-                    placeholder="e.g. 25"
-                    className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-transparent focus:border-brand-500/30 focus:bg-white dark:focus:bg-slate-900 rounded-2xl text-sm font-bold transition-all outline-none dark:text-white"
+                    placeholder="e.g. 25…"
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-transparent focus:border-brand-500/30 focus:bg-white dark:focus:bg-slate-900 rounded-2xl text-sm font-bold transition-all outline-none focus:ring-2 focus:ring-brand-500/20 dark:text-white"
+                    inputMode="numeric"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Mobile (Optional)</label>
+                  <label htmlFor="phone" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1 cursor-pointer">Mobile (Optional)</label>
                   <input
+                    id="phone"
+                    name="phone"
                     type="tel"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    placeholder="91..."
-                    className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-transparent focus:border-brand-500/30 focus:bg-white dark:focus:bg-slate-900 rounded-2xl text-sm font-bold transition-all outline-none dark:text-white"
+                    placeholder="e.g. 919876543210…"
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-transparent focus:border-brand-500/30 focus:bg-white dark:focus:bg-slate-900 rounded-2xl text-sm font-bold transition-all outline-none focus:ring-2 focus:ring-brand-500/20 dark:text-white"
+                    autoComplete="tel"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Consulting Doctor</label>
+                  <label htmlFor="doctorId" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1 cursor-pointer">Consulting Doctor</label>
                   <select
+                    id="doctorId"
+                    name="doctorId"
                     value={doctorId}
                     onChange={(e) => setDoctorId(e.target.value)}
-                    className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-transparent focus:border-brand-500/30 focus:bg-white dark:focus:bg-slate-900 rounded-2xl text-sm font-bold transition-all outline-none dark:text-white cursor-pointer"
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-transparent focus:border-brand-500/30 focus:bg-white dark:focus:bg-slate-900 rounded-2xl text-sm font-bold transition-all outline-none focus:ring-2 focus:ring-brand-500/20 dark:text-white cursor-pointer"
                     required
                   >
                     <option value="" disabled>Select Doctor</option>
@@ -208,11 +220,13 @@ export function WalkInModal({ isOpen, onClose, onSubmit, doctors }: WalkInModalP
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Appt. Time</label>
+                  <label htmlFor="selectedTime" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1 cursor-pointer">Appt. Time</label>
                   <select
+                    id="selectedTime"
+                    name="selectedTime"
                     value={selectedTime}
                     onChange={(e) => setSelectedTime(e.target.value)}
-                    className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-transparent focus:border-brand-500/30 focus:bg-white dark:focus:bg-slate-900 rounded-2xl text-sm font-bold transition-all outline-none dark:text-white cursor-pointer"
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-transparent focus:border-brand-500/30 focus:bg-white dark:focus:bg-slate-900 rounded-2xl text-sm font-bold transition-all outline-none focus:ring-2 focus:ring-brand-500/20 dark:text-white cursor-pointer"
                   >
                     <option value="">Current Time</option>
                     {getDoctorSlots().map((slot: string) => (
@@ -225,9 +239,9 @@ export function WalkInModal({ isOpen, onClose, onSubmit, doctors }: WalkInModalP
               <button
                 type="submit"
                 disabled={loading || !name.trim() || !doctorId}
-                className="w-full py-4 bg-brand-500 text-white font-black rounded-2xl hover:bg-brand-600 transition-all shadow-lg shadow-brand-500/25 flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-4 bg-brand-500 text-white font-black rounded-2xl hover:bg-brand-600 focus-visible:ring-4 focus-visible:ring-brand-500/50 transition-all shadow-lg shadow-brand-500/25 flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? <Loader2 className="animate-spin" size={20} /> : 'Add to Queue'}
+                {loading ? <Loader2 className="animate-spin" size={20} aria-hidden="true" /> : 'Add to Queue'}
               </button>
             </form>
           </motion.div>
