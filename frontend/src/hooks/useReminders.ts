@@ -135,6 +135,7 @@ export function useReminders() {
       console.error('Error adding reminder:', error);
       throw error;
     }
+    await fetchReminders();
     return newReminder;
   };
 
@@ -148,6 +149,7 @@ export function useReminders() {
       console.error('Error cancelling reminder:', error);
       throw error;
     }
+    await fetchReminders();
   };
 
   const updateReminderStatus = async (id: string, status: Reminder['status']) => {
@@ -160,6 +162,7 @@ export function useReminders() {
       console.error('Error updating reminder status:', error);
       throw error;
     }
+    await fetchReminders();
   };
 
   return { reminders, analytics, loading, addReminder, cancelReminder, updateReminderStatus, refreshReminders: fetchReminders };
