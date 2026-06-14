@@ -20,6 +20,88 @@ def _session_key(clinic_id, phone):
     return f"{clinic_id}:{phone}"
 
 
+def _find_patient_details(clinic_id, phone):
+    try:
+        db = get_db()
+        if db:
+            res = db.table("appointments").select("patient_name, patient_age").eq("phone", phone).order("created_at", descending=True).limit(1).execute()
+            if res.data:
+                return res.data[0].get("patient_name"), res.data[0].get("patient_age")
+    except Exception as e:
+        logger.error(f"Error looking up patient details: {e}")
+    return None, None
+
+
+def reschedule_followup_in_sheets(clinic, phone, new_date):
+    try:
+        from services.sheets import open_sheet
+        followup_sheet_name = f"{clinic.get('name', 'clinic').lower().replace(' ', '_')}_followup"
+        sheet = open_sheet(followup_sheet_name)
+        rows = sheet.get_all_records()
+        headers = sheet.row_values(1)
+        
+        date_col = headers.index("Date") + 1
+        
+        for idx, row in enumerate(rows, start=2):
+            if str(row.get("Phone", "")).strip() == str(phone).strip() and \
+               row.get("Status", "").strip().lower() in {"pending", "active"}:
+                sheet.update_cell(idx, date_col, f"'{new_date}")
+                return True
+        return False
+    except Exception as e:
+        logger.error(f"Error updating followup date in sheet: {e}")
+        return False
+
+
+def reschedule_followup(clinic, phone, days):
+    clinic_id = clinic.get("phone_number_id") or clinic.get("id")
+    try:
+        db = get_db()
+        if not db:
+            return False, "Database not available"
+        
+        response = db.table("reminders") \
+            .select("*") \
+            .eq("clinic_id", str(clinic_id)) \
+            .eq("patient_phone", phone) \
+            .eq("type", "follow_up") \
+            .eq("status", "Active") \
+            .execute()
+            
+        if not response.data:
+            return False, "No active follow-up reminder found"
+            
+        reminder = response.data[0]
+        reminder_id = reminder["id"]
+        
+        start_date_str = reminder.get("start_date")
+        try:
+            start_dt = datetime.strptime(start_date_str, "%Y-%m-%d")
+        except Exception:
+            start_dt = get_now()
+            
+        new_dt = start_dt + timedelta(days=days)
+        new_date_sb = new_dt.strftime("%Y-%m-%d")
+        new_date_sheet = new_dt.strftime("%d-%m-%Y")
+        
+        # Update Supabase
+        db.table("reminders") \
+            .update({
+                "start_date": new_date_sb,
+                "metadata": {**(reminder.get("metadata") or {}), "last_sent": ""}
+            }) \
+            .eq("id", reminder_id) \
+            .execute()
+            
+        # Update Google Sheets
+        reschedule_followup_in_sheets(clinic, phone, new_date_sheet)
+        
+        return True, new_date_sheet
+    except Exception as e:
+        logger.error(f"Error rescheduling follow-up: {e}")
+        return False, str(e)
+
+
 def _force_24h_time(raw_time: str) -> str:
     """
     Surgically extracts and normalizes time to HH:MM (24h).
@@ -1054,6 +1136,88 @@ def handle_message(clinic, message):
     if _is_staff_sender(clinic, phone):
         if _handle_staff_flow(clinic, phone, text, raw_text, key, session):
             return
+
+    # Handle follow-up reminder prompts
+    if step == "followup_prompt":
+        if text in {"1", "book", "1️⃣ book follow-up appointment", "1 book follow-up appointment"} or text.startswith("1"):
+            doctors = get_doctors(clinic_id) or clinic.get("doctors", [])
+            if not doctors:
+                send_text(clinic, phone, "No doctors are configured yet. Please contact the clinic.")
+                return
+            
+            # Find doctor by name
+            doc_name = session.get("doctor_name", "").replace("Dr. ", "").strip().lower()
+            selected_doc = None
+            for d in doctors:
+                if d.get("name", "").replace("Dr. ", "").strip().lower() == doc_name:
+                    selected_doc = d
+                    break
+            if not selected_doc and doctors:
+                selected_doc = doctors[0]
+                
+            p_name, p_age = _find_patient_details(clinic_id, phone)
+            if not p_name:
+                p_name = session.get("patient_name", "Patient")
+            if not p_age:
+                p_age = "30"
+                
+            dates = _date_options(selected_doc)
+            user_sessions[key] = {
+                "step": "select_date",
+                "clinic_id": clinic_id,
+                "phone": phone,
+                "doctor": selected_doc,
+                "name": p_name,
+                "age": p_age,
+                "dates": dates,
+            }
+            send_text(clinic, phone, f"Booking follow-up appointment with *{selected_doc.get('name')}* for patient *{p_name}*.")
+            send_list(clinic, phone, "Select a date", [{"title": "Available dates", "rows": _date_rows(dates)}])
+            return
+            
+        elif text in {"2", "reschedule", "2️⃣ reschedule follow-up appointment", "2 reschedule follow-up appointment"} or text.startswith("2"):
+            user_sessions[key] = {
+                **session,
+                "step": "followup_reschedule_menu",
+            }
+            send_buttons(
+                clinic,
+                phone,
+                "When would you like to reschedule your follow-up reminder to?",
+                [
+                    {"id": "res_3", "title": "In 3 Days"},
+                    {"id": "res_7", "title": "In 7 Days"},
+                    {"id": "res_14", "title": "In 14 Days"},
+                ]
+            )
+            return
+        else:
+            send_text(clinic, phone, "To book your follow-up appointment, please reply with *1*.\nTo reschedule it to another date, please reply with *2*.")
+            return
+
+    if step == "followup_reschedule_menu":
+        days = None
+        if "3" in text or text == "res_3":
+            days = 3
+        elif "7" in text or text == "res_7":
+            days = 7
+        elif "14" in text or text == "res_14":
+            days = 14
+            
+        if days is None:
+            send_text(clinic, phone, "Invalid selection. Please choose when to reschedule:\n- Reply 3 for 3 Days\n- Reply 7 for 7 Days\n- Reply 14 for 14 Days")
+            return
+            
+        success, new_date = reschedule_followup(clinic, phone, days)
+        if success:
+            send_text(clinic, phone, f"✅ Your follow-up reminder has been rescheduled. We will remind you on *{new_date}*.")
+            user_sessions[key] = {"step": "main_menu", "clinic_id": clinic_id, "phone": phone}
+            _show_main_menu(clinic, phone)
+        else:
+            send_text(clinic, phone, f"❌ Failed to reschedule: {new_date}. Please contact the clinic.")
+            user_sessions[key] = {"step": "main_menu", "clinic_id": clinic_id, "phone": phone}
+            _show_main_menu(clinic, phone)
+        return
     
     if text == "status":
         status_msg = _get_queue_status_info(clinic, phone)

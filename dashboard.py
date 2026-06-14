@@ -1172,8 +1172,9 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                                         f"Regular follow-ups help your doctor monitor your progress and ensure your treatment is working effectively.\n\n"
                                         f"📅 Follow-up Date: {display_date}\n"
                                         f"👨⚕️ Doctor: {doctor_name}\n\n"
-                                        f"To book your follow-up appointment, reply with:\n\n"
-                                        f"1️⃣ Book Follow-up Appointment\n\n"
+                                        f"To schedule your follow-up, reply with:\n\n"
+                                        f"1️⃣ Book Follow-up Appointment\n"
+                                        f"2️⃣ Reschedule Follow-up Appointment\n\n"
                                         f"Need assistance? Simply reply to this message.\n\n"
                                         f"Thank you,\n"
                                         f"*{clinic_name}*"
@@ -1181,6 +1182,21 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                                     st.toast(f"Sending reminder to {row.get('Phone')}...")
                                     if send_whatsapp(clinic, row.get('Phone', ''), msg):
                                         st.success("✅ Reminder Sent!")
+                                        
+                                        # Set user session to followup_prompt step
+                                        try:
+                                            from services.booking_logic import user_sessions, _session_key
+                                            key = _session_key(clinic.get("phone_number_id") or clinic.get("id"), row.get('Phone'))
+                                            user_sessions[key] = {
+                                                "step": "followup_prompt",
+                                                "clinic_id": clinic.get("phone_number_id") or clinic.get("id"),
+                                                "phone": row.get('Phone'),
+                                                "patient_name": patient_name,
+                                                "doctor_name": doctor_name,
+                                                "followup_date": display_date,
+                                            }
+                                        except Exception as se:
+                                            logger.error(f"Error setting session: {se}")
                                         # Optional: We don't rerun here to allow the user to see the success message, 
                                         # but the button is ready for another click if needed.
                                     else:
@@ -1518,8 +1534,9 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                                 f"Regular follow-ups help your doctor monitor your progress and ensure your treatment is working effectively.\n\n"
                                 f"📅 Follow-up Date: {med_start.strftime('%d-%m-%Y')}\n"
                                 f"👨⚕️ Doctor: {doc_prefix}\n\n"
-                                f"To book your follow-up appointment, reply with:\n\n"
-                                f"1️⃣ Book Follow-up Appointment\n\n"
+                                f"To schedule your follow-up, reply with:\n\n"
+                                f"1️⃣ Book Follow-up Appointment\n"
+                                f"2️⃣ Reschedule Follow-up Appointment\n\n"
                                 f"Need assistance? Simply reply to this message.\n\n"
                                 f"Thank you,\n"
                                 f"*{clinic_name}*"
@@ -1555,6 +1572,21 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                                                 "doctor_name": selected_doc
                                             }
                                         })
+                                        
+                                        # Set user session to followup_prompt step
+                                        try:
+                                            from services.booking_logic import user_sessions, _session_key
+                                            key = _session_key(clinic.get("phone_number_id") or clinic.get("id"), med_phone)
+                                            user_sessions[key] = {
+                                                "step": "followup_prompt",
+                                                "clinic_id": clinic.get("phone_number_id") or clinic.get("id"),
+                                                "phone": med_phone,
+                                                "patient_name": patient_name,
+                                                "doctor_name": selected_doc,
+                                                "followup_date": med_start.strftime('%d-%m-%Y'),
+                                            }
+                                        except Exception as se:
+                                            logger.error(f"Error setting session: {se}")
                                     except Exception as sbe:
                                         logger.error(f"Supabase sync error for follow-up: {sbe}")
                                     st.rerun()

@@ -86,9 +86,10 @@ Regular follow-ups help your doctor monitor your progress and ensure your treatm
 📅 Follow-up Date: ${displayDate}
 👨⚕️ Doctor: ${docPrefix}
 
-To book your follow-up appointment, reply with:
+To schedule your follow-up, reply with:
 
 1️⃣ Book Follow-up Appointment
+2️⃣ Reschedule Follow-up Appointment
 
 Need assistance? Simply reply to this message.
 

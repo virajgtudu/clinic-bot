@@ -540,8 +540,9 @@ def send_followup_reminders():
                     f"Regular follow-ups help your doctor monitor your progress and ensure your treatment is working effectively.\n\n"
                     f"📅 Follow-up Date: {display_date}\n"
                     f"👨⚕️ Doctor: {doctor_name}\n\n"
-                    f"To book your follow-up appointment, reply with:\n\n"
-                    f"1️⃣ Book Follow-up Appointment\n\n"
+                    f"To schedule your follow-up, reply with:\n\n"
+                    f"1️⃣ Book Follow-up Appointment\n"
+                    f"2️⃣ Reschedule Follow-up Appointment\n\n"
                     f"Need assistance? Simply reply to this message.\n\n"
                     f"Thank you,\n"
                     f"*{clinic_name}*"
@@ -592,6 +593,21 @@ def send_followup_reminders():
                         meta["last_sent"] = f"{last_sent},{type_sent} ({get_now().strftime('%d-%m-%Y %H:%M')})".strip(",")
                         db.table("reminders").update({"metadata": meta}).eq("id", f.get("id")).execute()
                         print(f"      ✅ Sent follow-up to {phone}")
+                        
+                        # Set user session to followup_prompt step
+                        try:
+                            from services.booking_logic import user_sessions, _session_key
+                            key = _session_key(clinic.get("phone_number_id") or clinic.get("id"), phone)
+                            user_sessions[key] = {
+                                "step": "followup_prompt",
+                                "clinic_id": clinic.get("phone_number_id") or clinic.get("id"),
+                                "phone": phone,
+                                "patient_name": name,
+                                "doctor_name": doctor_name,
+                                "followup_date": display_date,
+                            }
+                        except Exception as se:
+                            print(f"      ⚠️ Failed to set user session: {se}")
                     except Exception as e:
                         print(f"      ⚠️ Failed to update status: {e}")
         except Exception as e:
