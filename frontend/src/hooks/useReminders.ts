@@ -16,6 +16,7 @@ export interface Reminder {
   times: string[];
   status: 'Active' | 'Cancelled' | 'Completed' | 'Missed';
   created_at: string;
+  metadata?: Record<string, any>;
 }
 
 export interface ReminderAnalytics {

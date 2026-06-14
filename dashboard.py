@@ -964,7 +964,8 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                                                     "metadata": {
                                                         "source": "queue_popover",
                                                         "instructions": final_msg,
-                                                        "original_appointment_date": appointment_date
+                                                        "original_appointment_date": appointment_date,
+                                                        "doctor_name": doctor
                                                     }
                                                 })
                                             except Exception as sbe:
@@ -1134,7 +1135,49 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                             with c3:
                                 rem_btn, comp_btn, miss_btn = st.columns(3)
                                 if rem_btn.button(f"📤", key=f"fup_rem_btn_{idx}", help="Send Instant WhatsApp Reminder"):
-                                    msg = f"🔄 Follow-up Reminder: Hi {row.get('Patient Name', 'Patient')}, this is a reminder for your follow-up regarding {row.get('Item', 'your visit')} scheduled for {row.get('Date', '')}."
+                                    # Try to find doctor name from Supabase reminder metadata
+                                    doctor_name = None
+                                    if not reminders_supabase.empty and f_id:
+                                        matching = reminders_supabase[reminders_supabase['id'] == f_id]
+                                        if not matching.empty:
+                                            meta = matching.iloc[0].get('metadata')
+                                            if isinstance(meta, str):
+                                                try:
+                                                    import json
+                                                    meta = json.loads(meta)
+                                                except Exception:
+                                                    meta = {}
+                                            if isinstance(meta, dict):
+                                                doctor_name = meta.get('doctor_name')
+                                                
+                                    if not doctor_name:
+                                        doctors = clinic.get("doctors", [])
+                                        if doctors:
+                                            doc = doctors[0].get("name", "your doctor")
+                                            doctor_name = doc if doc.startswith("Dr.") else f"Dr. {doc}"
+                                        else:
+                                            doctor_name = "your doctor"
+                                    else:
+                                        if not doctor_name.startswith("Dr.") and doctor_name != "your doctor":
+                                            doctor_name = f"Dr. {doctor_name}"
+
+                                    clinic_name = clinic.get("name", "Clinic")
+                                    patient_name = row.get('Patient Name', 'Patient')
+                                    display_date = row.get('Date', '')
+
+                                    msg = (
+                                        f"🏥 *{clinic_name} Follow-up Reminder*\n\n"
+                                        f"Hello *{patient_name}*,\n\n"
+                                        f"This is a friendly reminder that your follow-up consultation with *{doctor_name}* is due on *{display_date}*.\n\n"
+                                        f"Regular follow-ups help your doctor monitor your progress and ensure your treatment is working effectively.\n\n"
+                                        f"📅 Follow-up Date: {display_date}\n"
+                                        f"👨⚕️ Doctor: {doctor_name}\n\n"
+                                        f"To book your follow-up appointment, reply with:\n\n"
+                                        f"1️⃣ Book Follow-up Appointment\n\n"
+                                        f"Need assistance? Simply reply to this message.\n\n"
+                                        f"Thank you,\n"
+                                        f"*{clinic_name}*"
+                                    )
                                     st.toast(f"Sending reminder to {row.get('Phone')}...")
                                     if send_whatsapp(clinic, row.get('Phone', ''), msg):
                                         st.success("✅ Reminder Sent!")
@@ -1446,7 +1489,11 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
             elif st.session_state.get("reminder_type_radio") == "Follow-up":
                 with st.form("add_followup_reminder"):
                     med_phone = st.text_input("Patient Phone*", value=st.session_state.temp_patient_phone, placeholder="919876543210")
+                    patient_name = st.text_input("Patient Name*", value=st.session_state.get("temp_patient_name", ""), placeholder="Rajesh Kumar")
                     med_name = st.text_input("Follow-up Reason*", placeholder="Post-surgery checkup")
+                    
+                    doctor_options = [d["name"] for d in clinic.get("doctors", [])]
+                    selected_doc = st.selectbox("Doctor*", doctor_options if doctor_options else ["Dr. Sharma"])
                     
                     f1, f2 = st.columns(2)
                     with f1:
@@ -1457,16 +1504,25 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                     med_instructions = st.text_area("Instructions", placeholder="Any specific instructions...")
                     
                     if st.form_submit_button("💾 Save & Notify Patient"):
-                        if not med_phone or not med_name:
-                            st.error("Phone and Reason required!")
+                        if not med_phone or not med_name or not patient_name:
+                            st.error("Phone, Name and Reason required!")
                         else:
                             time1_str = time1.strftime("%H:%M")
+                            clinic_name = clinic.get("name", "Clinic")
+                            doc_prefix = selected_doc if selected_doc.startswith("Dr.") else f"Dr. {selected_doc}"
+                            
                             msg = (
-                                f"🔄 *Follow-up Reminder*\n\n"
-                                f"Reason: {med_name}\n"
-                                f"Date: {med_start.strftime('%d-%m-%Y')}\n"
-                                f"Time: {time1_str}\n\n"
-                                f"{f'Instructions: {med_instructions}' if med_instructions else ''}"
+                                f"🏥 *{clinic_name} Follow-up Reminder*\n\n"
+                                f"Hello *{patient_name}*,\n\n"
+                                f"This is a friendly reminder that your follow-up consultation with *{doc_prefix}* is due on *{med_start.strftime('%d-%m-%Y')}*.\n\n"
+                                f"Regular follow-ups help your doctor monitor your progress and ensure your treatment is working effectively.\n\n"
+                                f"📅 Follow-up Date: {med_start.strftime('%d-%m-%Y')}\n"
+                                f"👨⚕️ Doctor: {doc_prefix}\n\n"
+                                f"To book your follow-up appointment, reply with:\n\n"
+                                f"1️⃣ Book Follow-up Appointment\n\n"
+                                f"Need assistance? Simply reply to this message.\n\n"
+                                f"Thank you,\n"
+                                f"*{clinic_name}*"
                             )
                             
                             if send_whatsapp(clinic, med_phone, msg):
@@ -1485,7 +1541,7 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                                         db_date = med_start.strftime("%Y-%m-%d")
                                         create_reminder({
                                             "clinic_id": clinic.get("phone_number_id") or clinic.get("id"),
-                                            "patient_name": "Patient",
+                                            "patient_name": patient_name,
                                             "patient_phone": med_phone,
                                             "type": "follow_up",
                                             "item_name": med_name,
@@ -1495,7 +1551,8 @@ def show_clinic_dashboard(clinic, bookings, medicines, tests=None, followups=Non
                                             "metadata": {
                                                 "source": "dashboard",
                                                 "instructions": med_instructions,
-                                                "preferred_time": time1_str
+                                                "preferred_time": time1_str,
+                                                "doctor_name": selected_doc
                                             }
                                         })
                                     except Exception as sbe:

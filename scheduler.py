@@ -513,6 +513,40 @@ def send_followup_reminders():
                 
                 print(f"      Checking follow-up: {name} ({phone}) - Date: {f_date}, Times: {reminder_times}, Last Sent: {last_sent}")
 
+                meta = f.get('metadata') or {}
+                doctor_name = meta.get("doctor_name")
+                if not doctor_name:
+                    doctors = clinic.get("doctors", [])
+                    if doctors:
+                        doc = doctors[0].get("name", "your doctor")
+                        doctor_name = doc if doc.startswith("Dr.") else f"Dr. {doc}"
+                    else:
+                        doctor_name = "your doctor"
+                else:
+                    if not doctor_name.startswith("Dr.") and doctor_name != "your doctor":
+                        doctor_name = f"Dr. {doctor_name}"
+
+                clinic_name = clinic.get("name", "Clinic")
+                display_date = f_date
+                try:
+                    display_date = datetime.strptime(f_date, "%Y-%m-%d").strftime("%d-%m-%Y")
+                except Exception:
+                    pass
+
+                new_msg = (
+                    f"🏥 *{clinic_name} Follow-up Reminder*\n\n"
+                    f"Hello *{name}*,\n\n"
+                    f"This is a friendly reminder that your follow-up consultation with *{doctor_name}* is due on *{display_date}*.\n\n"
+                    f"Regular follow-ups help your doctor monitor your progress and ensure your treatment is working effectively.\n\n"
+                    f"📅 Follow-up Date: {display_date}\n"
+                    f"👨⚕️ Doctor: {doctor_name}\n\n"
+                    f"To book your follow-up appointment, reply with:\n\n"
+                    f"1️⃣ Book Follow-up Appointment\n\n"
+                    f"Need assistance? Simply reply to this message.\n\n"
+                    f"Thank you,\n"
+                    f"*{clinic_name}*"
+                )
+
                 msg = None
                 type_sent = ""
 
@@ -539,12 +573,7 @@ def send_followup_reminders():
                                           (current_time.hour == reminder_hour and current_time.minute >= reminder_minute))
                             
                             if is_past_time and dose_id not in last_sent:
-                                msg = (
-                                    f"👨‍⚕️ *Follow-up Reminder*\n\n"
-                                    f"Hi {name}, this is a reminder for your scheduled follow-up today regarding:\n"
-                                    f"📝 *{reason}*\n\n"
-                                    f"Please contact the clinic if you have any questions or need to reschedule."
-                                )
+                                msg = new_msg
                                 type_sent = dose_id
                                 break
                         except Exception as te:
@@ -552,12 +581,7 @@ def send_followup_reminders():
                 
                 # Fallback to default (once a day check) if no specific time set or triggered
                 if not msg and today_date_str not in last_sent:
-                    msg = (
-                        f"👨‍⚕️ *Follow-up Reminder*\n\n"
-                        f"Hi {name}, this is a reminder for your scheduled follow-up today regarding:\n"
-                        f"📝 *{reason}*\n\n"
-                        f"Please contact the clinic if you have any questions or need to reschedule."
-                    )
+                    msg = new_msg
                     type_sent = today_date_str
 
                 if msg and send_whatsapp(clinic, phone, msg):

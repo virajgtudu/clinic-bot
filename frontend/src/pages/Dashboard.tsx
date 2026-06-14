@@ -491,6 +491,8 @@ export default function Dashboard() {
           start.setDate(start.getDate() + days);
           const dateStr = start.toISOString().split('T')[0];
           
+          const doctorName = doctors.find((d: any) => d.id === followUpPatient.doctor_id)?.name || '';
+
           try {
             await addReminder({
               patient_name: name,
@@ -502,6 +504,9 @@ export default function Dashboard() {
               start_date: dateStr,
               end_date: dateStr,
               times: ['08:00'],
+              metadata: {
+                doctor_name: doctorName
+              }
             });
             alert('Follow-up scheduled successfully.');
           } catch (err) {

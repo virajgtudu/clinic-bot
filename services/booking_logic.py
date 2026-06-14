@@ -1092,7 +1092,14 @@ def handle_message(clinic, message):
         _show_main_menu(clinic, phone)
         return
 
-    if text in {"new", "book"} and step in {"main_menu", "main"}:
+    is_followup_booking = (
+        "book follow-up" in text or 
+        "book follow up" in text or 
+        "1" in text and "follow" in text or
+        text == "1️⃣ book follow-up appointment" or 
+        text == "1 book follow-up appointment"
+    )
+    if (text in {"new", "book"} and step in {"main_menu", "main"}) or is_followup_booking:
         # Fetch dynamic doctors from Supabase
         doctors = get_doctors(clinic_id)
         if not doctors:
