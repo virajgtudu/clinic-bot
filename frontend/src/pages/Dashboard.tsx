@@ -78,12 +78,39 @@ export default function Dashboard() {
     }
   };
 
-  const emergencyQueue = queue.filter(p => p.status === 'emergency');
-  const waitingQueue = queue.filter(p => p.status === 'waiting' || p.status === 'emergency' || p.status === 'serving');
+  // Helper to format Visit ID (Prefix-000)
+  const getFormattedToken = (doctorId: string, tokenNum: number | string) => {
+    const doctor = doctors.find(d => d.id === doctorId);
+    const doctorName = doctor ? doctor.name : 'Unknown';
+    const cleanName = doctorName.replace(/^Dr\.?\s+/i, '').trim();
+    const parts = cleanName.split(' ');
+    const prefix = parts.length >= 2 ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase() : cleanName.substring(0, 2).toUpperCase();
+    const num = typeof tokenNum === 'number' ? tokenNum : parseInt(tokenNum, 10) || 0;
+    return `${prefix}-${num.toString().padStart(3, '0')}`;
+  };
+
+  const getMaxCalledTokenForDoc = (docId: string) => {
+    const calledPatients = queue.filter(p => 
+      p.doctor_id === docId && 
+      (p.status === 'serving' || p.status === 'completed')
+    );
+    if (calledPatients.length === 0) return 0;
+    return Math.max(...calledPatients.map(p => Number(p.token) || 0));
+  };
+
+  const isPatientSkipped = (p: any) => {
+    if (p.status === 'serving' || p.status === 'completed' || p.status === 'cancelled') return false;
+    const maxCalled = getMaxCalledTokenForDoc(p.doctor_id);
+    return (Number(p.token) || 0) <= maxCalled;
+  };
+
+  const emergencyQueue = queue.filter(p => p.status === 'emergency' && !isPatientSkipped(p));
+  const waitingQueue = queue.filter(p => (p.status === 'waiting' || p.status === 'emergency' || p.status === 'serving') && !isPatientSkipped(p));
+  const activeUpcomingQueue = queue.filter(p => (p.status === 'serving' || p.status === 'waiting') && !isPatientSkipped(p));
   const servingPatient = queue.find(p => p.status === 'serving');
   const servingToken = servingPatient ? servingPatient.token : '---';
 
-  const activeWaiting = queue.filter(p => p.status === 'waiting' || p.status === 'emergency');
+  const activeWaiting = queue.filter(p => (p.status === 'waiting' || p.status === 'emergency') && !isPatientSkipped(p));
   const avgWaitTime = activeWaiting.length > 0 
     ? Math.round(activeWaiting.reduce((acc, p) => acc + (p.wait_time_mins || 0), 0) / activeWaiting.length)
     : 0;
@@ -284,7 +311,10 @@ export default function Dashboard() {
                               className="bg-white dark:bg-slate-900 p-5 rounded-2xl flex items-center justify-between shadow-md border border-rose-100/50 dark:border-rose-900/20 group hover:scale-[1.01] transition-transform"
                             >
                               <div className="flex items-center gap-5">
-                                <span className="text-2xl font-black text-rose-600 dark:text-rose-400 font-mono">#{patient.token}</span>
+                                <div className="flex items-baseline gap-2">
+                                  <span className="text-2xl font-black text-rose-600 dark:text-rose-400 font-mono">#{patient.token}</span>
+                                  <span className="text-[10px] font-black text-slate-400 dark:text-slate-500">({getFormattedToken(patient.doctor_id, patient.token)})</span>
+                                </div>
                                 <div>
                                   <p className="font-bold text-slate-800 dark:text-white">{patient.name}</p>
                                   <div className="flex items-center gap-2 mt-1">
@@ -320,7 +350,7 @@ export default function Dashboard() {
                     <div className="p-4 overflow-x-auto text-center">
                       {loading ? (
                          <div className="p-20 flex flex-col items-center gap-3"><Loader2 className="animate-spin text-brand-500" size={32} /><p className="text-sm font-bold text-slate-400">Syncing with server...</p></div>
-                      ) : queue.filter(p => p.status === 'serving' || p.status === 'waiting').length === 0 ? (
+                      ) : activeUpcomingQueue.length === 0 ? (
                         <div className="p-20 flex flex-col items-center gap-4">
                           <div className="w-16 h-16 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center justify-center text-slate-300 dark:text-slate-700">
                             <Users size={32} />
@@ -341,7 +371,7 @@ export default function Dashboard() {
                         </thead>
                         <tbody>
                           <AnimatePresence initial={false}>
-                            {queue.filter(p => p.status === 'serving' || p.status === 'waiting').map((patient) => (
+                            {activeUpcomingQueue.map((patient) => (
                               <motion.tr 
                                 layout
                                 initial={{ opacity: 0, x: -20 }}
@@ -354,11 +384,15 @@ export default function Dashboard() {
                                 )}
                               >
                                 <td className="px-6 py-6 first:rounded-l-2xl last:rounded-r-2xl">
-                                  <div className="flex items-center gap-3">
+                                  <div className="flex items-center gap-4">
                                     <span className={cn(
-                                      "w-10 h-10 flex items-center justify-center rounded-xl font-black text-sm",
+                                      "w-10 h-10 flex items-center justify-center rounded-xl font-black text-sm shrink-0",
                                       patient.status === 'serving' ? "bg-brand-500 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
                                     )}>#{patient.token}</span>
+                                    <div>
+                                      <p className="text-xs font-black text-slate-700 dark:text-slate-200">{getFormattedToken(patient.doctor_id, patient.token)}</p>
+                                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Visit ID</p>
+                                    </div>
                                     {patient.status === 'serving' && <motion.span initial={{scale: 0}} animate={{scale:1}} className="text-[10px] font-black text-brand-600 bg-brand-100 dark:bg-brand-900/30 px-2 py-0.5 rounded-full ring-1 ring-brand-200/50">LIVE</motion.span>}
                                   </div>
                                 </td>

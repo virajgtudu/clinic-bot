@@ -127,7 +127,7 @@ export function useQueue() {
       if (currentlyServing) {
         const { error: completeErr } = await supabase
           .from('appointments')
-          .update({ status: 'Completed' })
+          .update({ status: 'Pending' })
           .eq('id', currentlyServing.id);
         if (completeErr) throw completeErr;
       }
@@ -143,7 +143,7 @@ export function useQueue() {
       // Optimistic update
       setQueue(prev => prev.map(p => {
         if (currentlyServing && p.id === currentlyServing.id) {
-          return { ...p, status: 'completed' };
+          return { ...p, status: 'waiting' };
         }
         if (nextPatient && p.id === nextPatient.id) {
           return { ...p, status: 'serving' };

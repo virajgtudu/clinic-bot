@@ -17,7 +17,7 @@ ClinicPRO is a professional, multi-tenant clinic management platform. It integra
 - **Timezone:** Standardized to **Asia/Kolkata (IST)** across all modules (`config.get_now()`).
 
 ## Core Features
-- **Smart Queue:** Real-time patient flow monitoring with "Now Serving" updates and "Next Patient" automated status transitions.
+- **Smart Queue:** Real-time patient flow monitoring with "Now Serving" updates and "Next Patient" automated status transitions. The "Next Patient" action conditionally prompts the administrator to select a doctor if multiple doctors exist (bypassing the selection if only one doctor is configured) and advances the queue by reverting the currently serving patient back to `Pending` status (which removes them from the active dashboard queue while keeping their status as `Pending` inside history and appointments) and serving the next waiting one.
 - **Doctor Management:** UI-driven management of doctors, specialties, and session timings/slots.
 - **Initials-based Tokens:** Sequential tokens per doctor/date using first and last initials (e.g., `PJ-001` for Dr. Prabhat Jain).
 - **Automated Reminders:** Medication (interactive buttons), Test, and Follow-up reminders delivered via WhatsApp. Reminders are dual-synced between Supabase and Sheets.
@@ -30,6 +30,7 @@ ClinicPRO is a professional, multi-tenant clinic management platform. It integra
 - **Date Standard:** System-wide standard is **`DD-MM-YYYY`** for display and **`YYYY-MM-DD`** for Supabase queries.
 - **Token Format:** `[Initials]-[000]` (e.g., `PJ-001`), unique per doctor/date.
 - **Queue Statuses:** `Pending`, `Serving`, `Completed`, `Cancelled`, `Emergency`.
+- **WhatsApp State Management:** Sending greetings (e.g., `"Hi"`, `"Hello"`, `"Start"`) resets the user's session step to `main_menu` and clears any active prompt states (like `followup_prompt`). Generic booking/cancellation keywords (e.g., `"book"`, `"cancel"`) only trigger follow-up booking/cancellation actions when the user is explicitly in the `followup_prompt` state, preventing them from hijacking standard booking requests.
 - **Data Access:** Always use `.get()` for dictionary keys (especially `phone_number_id` and `sheet_name`) to ensure resilience against differing clinic configurations.
 
 ## Deployment (Render)
