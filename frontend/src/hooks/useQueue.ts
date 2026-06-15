@@ -113,20 +113,45 @@ export function useQueue() {
     }
   };
 
-  const callNext = async () => {
-    const nextPatient = queue.find(p => p.status === 'waiting' || p.status === 'emergency');
-    if (nextPatient) {
-      try {
-        const { error } = await supabase
+  const callNext = async (doctorId?: string) => {
+    const currentlyServing = queue.find(p => 
+      p.status === 'serving' && 
+      (!doctorId || p.doctor_id === doctorId)
+    );
+    const nextPatient = queue.find(p => 
+      (p.status === 'waiting' || p.status === 'emergency') && 
+      (!doctorId || p.doctor_id === doctorId)
+    );
+
+    try {
+      if (currentlyServing) {
+        const { error: completeErr } = await supabase
+          .from('appointments')
+          .update({ status: 'Completed' })
+          .eq('id', currentlyServing.id);
+        if (completeErr) throw completeErr;
+      }
+
+      if (nextPatient) {
+        const { error: serveErr } = await supabase
           .from('appointments')
           .update({ status: 'Serving' })
           .eq('id', nextPatient.id);
-        if (error) throw error;
-        // Optimistic update
-        setQueue(prev => prev.map(p => p.id === nextPatient.id ? { ...p, status: 'serving' } : p));
-      } catch (err) {
-        console.error('Error calling next:', err);
+        if (serveErr) throw serveErr;
       }
+
+      // Optimistic update
+      setQueue(prev => prev.map(p => {
+        if (currentlyServing && p.id === currentlyServing.id) {
+          return { ...p, status: 'completed' };
+        }
+        if (nextPatient && p.id === nextPatient.id) {
+          return { ...p, status: 'serving' };
+        }
+        return p;
+      }));
+    } catch (err) {
+      console.error('Error calling next:', err);
     }
   };
 

@@ -32,6 +32,7 @@ import { useDoctors } from '../hooks/useDoctors';
 import { useWhatsAppStatus } from '../hooks/useWhatsAppStatus';
 import { useAuth } from '../components/AuthContext';
 import { WalkInModal } from '../components/WalkInModal';
+import { DoctorSelectModal } from '../components/DoctorSelectModal';
 import { RemindersView } from '../components/RemindersView';
 import { FollowUpModal } from '../components/FollowUpModal';
 import { useReminders } from '../hooks/useReminders';
@@ -65,6 +66,17 @@ export default function Dashboard() {
   const [activeView, setActiveView] = useState<DashboardView>('queue');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [followUpPatient, setFollowUpPatient] = useState<any>(null);
+  const [isDoctorSelectOpen, setIsDoctorSelectOpen] = useState(false);
+
+  const handleNextPatientClick = () => {
+    if (doctors.length === 1) {
+      callNext(doctors[0].id);
+    } else if (doctors.length > 1) {
+      setIsDoctorSelectOpen(true);
+    } else {
+      callNext();
+    }
+  };
 
   const emergencyQueue = queue.filter(p => p.status === 'emergency');
   const waitingQueue = queue.filter(p => p.status === 'waiting' || p.status === 'emergency' || p.status === 'serving');
@@ -235,7 +247,7 @@ export default function Dashboard() {
                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Clinic Controls</p>
                    <div className="flex flex-col gap-3">
                      <ActionButton onClick={() => setIsModalOpen(true)} icon={<UserPlus size={18} />} label="Add Walk-in" primary />
-                     <ActionButton onClick={callNext} icon={<FastForward size={18} />} label="Next Patient" />
+                     <ActionButton onClick={handleNextPatientClick} icon={<FastForward size={18} />} label="Next Patient" />
                    </div>
                 </div>
               </div>
@@ -514,6 +526,15 @@ export default function Dashboard() {
             console.error('Failed to schedule follow-up:', err);
             alert('Failed to schedule follow-up. Please ensure patient details are complete.');
           }
+        }}
+      />
+
+      <DoctorSelectModal
+        isOpen={isDoctorSelectOpen}
+        onClose={() => setIsDoctorSelectOpen(false)}
+        doctors={doctors}
+        onSelect={async (doctorId) => {
+          await callNext(doctorId);
         }}
       />
     </div>
