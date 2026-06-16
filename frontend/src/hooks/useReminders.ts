@@ -60,10 +60,34 @@ export function useReminders() {
       }
 
       const typedData = (data || []) as Reminder[];
-      setReminders(typedData);
+
+      // Get today's date in IST (Asia/Kolkata)
+      const today = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(new Date());
+
+      const processedData = typedData.map(r => {
+        if (r.status === 'Active' && r.end_date && r.end_date < today) {
+          // Trigger DB update in background (async)
+          supabase
+            .from('reminders')
+            .update({ status: 'Completed' })
+            .eq('id', r.id)
+            .then(({ error: updateErr }) => {
+              if (updateErr) console.error('Error auto-completing reminder:', r.id, updateErr);
+            });
+          return { ...r, status: 'Completed' as const };
+        }
+        return r;
+      });
+
+      setReminders(processedData);
       
       // Calculate simple analytics locally for responsiveness
-      const active = typedData.filter(r => r?.status === 'Active');
+      const active = processedData.filter(r => r?.status === 'Active');
       const medCount = active.filter(r => r?.type === 'medication').length;
       const testCount = active.filter(r => r?.type === 'test').length;
       const followUpCount = active.filter(r => r?.type === 'follow_up').length;

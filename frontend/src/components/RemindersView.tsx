@@ -41,6 +41,12 @@ export function RemindersView() {
       if (filter === 'today_follow_up') {
         return r.type === 'follow_up' && r.start_date === todayStr && (r.status === 'Active' || r.status === 'Missed');
       }
+      
+      // Filter out non-active reminders for medications and tests
+      if ((filter === 'medication' || filter === 'test') && r.status !== 'Active') {
+        return false;
+      }
+
       const matchesFilter = filter === 'all' || r.type === filter;
       const patientName = r.patient_name || '';
       const itemName = r.item_name || '';
