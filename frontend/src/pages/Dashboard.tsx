@@ -13,18 +13,12 @@ import {
   AlertCircle,
   Clock, 
   FastForward,
-  TrendingUp,
   Activity,
   Stethoscope,
   LogOut,
   Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  AreaChart, 
-  Area, 
-  ResponsiveContainer 
-} from 'recharts';
 import { cn } from '../lib/utils';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { useQueue } from '../hooks/useQueue';
@@ -43,16 +37,6 @@ import { AnalyticsView } from '../components/AnalyticsView';
 import { ClinicSettings } from '../components/ClinicSettingsView';
 import { SetupClinic } from '../components/SetupClinic';
 
-const busiestHoursData = [
-  { name: '9am', value: 40 },
-  { name: '10am', value: 30 },
-  { name: '11am', value: 65 },
-  { name: '12pm', value: 45 },
-  { name: '1pm', value: 20 },
-  { name: '2pm', value: 55 },
-  { name: '3pm', value: 75 },
-  { name: '4pm', value: 40 },
-];
 
 type DashboardView = 'queue' | 'appointments' | 'patients' | 'reminders' | 'analytics' | 'settings' | 'doctor_availability';
 
@@ -279,9 +263,9 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+              <div className="w-full space-y-8">
                 {/* Live Queue Board */}
-                <div className="lg:col-span-2 space-y-8">
+                <div className="space-y-8">
                   {/* Emergency Queue */}
                   <AnimatePresence>
                     {emergencyQueue.length > 0 && (
@@ -435,68 +419,6 @@ export default function Dashboard() {
                         </tbody>
                       </table>
                       )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Side Analytics Panels */}
-                <div className="space-y-10">
-                  {/* Compliance Widget */}
-                  <div className="bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-950 p-10 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-xl relative overflow-hidden group">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-8 relative">Medication Compliance</p>
-                    <div className="relative w-48 h-48 mx-auto mb-8 transition-transform group-hover:scale-105 duration-500">
-                      <svg className="w-full h-full transform -rotate-90 filter drop-shadow-lg">
-                        <circle cx="96" cy="96" r="84" className="stroke-slate-100 dark:stroke-slate-800" strokeWidth="16" fill="none" />
-                        <circle 
-                            cx="96" cy="96" r="84" 
-                            className="stroke-brand-500" 
-                            strokeWidth="16" 
-                            fill="none" 
-                            strokeDasharray={528} 
-                            strokeDashoffset={528 * (1 - 0.82)} 
-                            strokeLinecap="round"
-                          />
-                      </svg>
-                      <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-5xl font-black dark:text-white bg-clip-text text-transparent bg-gradient-to-br from-brand-600 to-emerald-500">82%</span>
-                        <div className="flex items-center gap-1 mt-1 text-[10px] font-black text-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 rounded-full">
-                          <TrendingUp size={10} /> +4.2%
-                        </div>
-                      </div>
-                    </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 text-center font-medium leading-relaxed relative">Excellent! Patients are responding well to WhatsApp reminders.</p>
-                  </div>
-
-                  {/* Busiest Hours Chart */}
-                  <div className="bg-white dark:bg-slate-900 p-10 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-xl group">
-                    <div className="flex items-center justify-between mb-8">
-                      <div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Peak Traffic</p>
-                        <h4 className="text-lg font-black dark:text-white mt-1">Busiest Hours</h4>
-                      </div>
-                      <div className="p-3 bg-brand-50 dark:bg-brand-900/20 text-brand-500 rounded-2xl group-hover:rotate-12 transition-transform">
-                        <TrendingUp size={20} />
-                      </div>
-                    </div>
-                    <div className="h-48 w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={busiestHoursData}>
-                          <defs>
-                            <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.2}/>
-                              <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0}/>
-                            </linearGradient>
-                          </defs>
-                          <Area 
-                            type="monotone" 
-                            dataKey="value" 
-                            stroke="#0ea5e9" 
-                            strokeWidth={4} 
-                            fillOpacity={1} 
-                            fill="url(#colorValue)" 
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
                     </div>
                   </div>
                 </div>
