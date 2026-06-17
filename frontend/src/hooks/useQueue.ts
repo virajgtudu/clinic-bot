@@ -169,8 +169,52 @@ export function useQueue() {
     }
   };
 
-  const addWalkIn = async (name: string, phone: string = 'walk-in', age: number = 0, doctorId: string, time?: string) => {
+  const addWalkIn = async (name: string, phone: string = 'walk-in', age: number = 0, doctorId: string, time?: string, patientId?: string) => {
     if (!profile?.clinic_id) return;
+    
+    // If a custom Patient ID is provided, check/insert patient first
+    if (patientId && patientId.trim()) {
+      const serial = patientId.trim().toUpperCase();
+      try {
+        const { data: existing } = await supabase
+          .from('patients')
+          .select('id, name, phone, age')
+          .eq('clinic_id', profile.clinic_id)
+          .eq('patient_id_serial', serial)
+          .maybeSingle();
+
+        if (!existing) {
+          const { error: insertErr } = await supabase
+            .from('patients')
+            .insert({
+              clinic_id: profile.clinic_id,
+              patient_id_serial: serial,
+              name,
+              phone: phone || 'walk-in',
+              age: age || 0
+            });
+          if (insertErr) {
+            console.error('Error inserting manual patient ID:', insertErr);
+          }
+        } else {
+          if (existing.name !== name || existing.phone !== phone || existing.age !== age) {
+            const { error: updateErr } = await supabase
+              .from('patients')
+              .update({
+                name,
+                phone: phone || 'walk-in',
+                age: age || 0
+              })
+              .eq('id', existing.id);
+            if (updateErr) {
+              console.error('Error updating patient details by ID:', updateErr);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to verify/insert patient by ID:', err);
+      }
+    }
     
     const today = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'Asia/Kolkata',

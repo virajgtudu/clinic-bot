@@ -1,15 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { X, UserPlus, Loader2 } from 'lucide-react';
+import { X, UserPlus, Loader2, Search } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { supabase } from '../lib/supabase';
+import { useAuth } from './AuthContext';
 
 interface WalkInModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (name: string, phone: string, age: number, doctorId: string, time: string) => Promise<any>;
+  onSubmit: (name: string, phone: string, age: number, doctorId: string, time: string, patientId: string) => Promise<any>;
   doctors: any[];
 }
 
 export function WalkInModal({ isOpen, onClose, onSubmit, doctors }: WalkInModalProps) {
+  const { profile } = useAuth();
+  const [patientIdInput, setPatientIdInput] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [age, setAge] = useState<string>('');
@@ -22,6 +27,36 @@ export function WalkInModal({ isOpen, onClose, onSubmit, doctors }: WalkInModalP
       setDoctorId(doctors[0].id);
     }
   }, [doctors]);
+
+  // Auto-lookup patient by ID
+  useEffect(() => {
+    const lookupPatient = async () => {
+      if (patientIdInput.length < 4 || !profile?.clinic_id) return;
+      
+      setIsSearching(true);
+      try {
+        const { data, error } = await supabase
+          .from('patients')
+          .select('name, phone, age')
+          .eq('clinic_id', profile.clinic_id)
+          .eq('patient_id_serial', patientIdInput.toUpperCase().trim())
+          .maybeSingle();
+
+        if (data && !error) {
+          setName(data.name || '');
+          setPhone(data.phone || '');
+          setAge(data.age ? String(data.age) : '');
+        }
+      } catch (err) {
+        console.error('Patient lookup failed:', err);
+      } finally {
+        setIsSearching(false);
+      }
+    };
+
+    const timer = setTimeout(lookupPatient, 500);
+    return () => clearTimeout(timer);
+  }, [patientIdInput, profile?.clinic_id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,10 +82,11 @@ export function WalkInModal({ isOpen, onClose, onSubmit, doctors }: WalkInModalP
         console.warn('Time conversion failed, sending raw:', timeToUse);
       }
 
-      await onSubmit(name, phone || 'walk-in', parseInt(age) || 0, doctorId, timeToUse);
+      await onSubmit(name, phone || 'walk-in', parseInt(age) || 0, doctorId, timeToUse, patientIdInput);
       setName('');
       setPhone('');
       setAge('');
+      setPatientIdInput('');
       setSelectedTime('');
       onClose();
     } catch (error) {
@@ -156,11 +192,31 @@ export function WalkInModal({ isOpen, onClose, onSubmit, doctors }: WalkInModalP
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
+                  <label htmlFor="patientId" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1 flex items-center gap-2 cursor-pointer">
+                    Patient ID (Optional)
+                    {isSearching && <Loader2 size={12} className="animate-spin text-brand-500" />}
+                  </label>
+                  <div className="relative">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input
+                      id="patientId"
+                      name="patientId"
+                      type="text"
+                      autoFocus
+                      value={patientIdInput}
+                      onChange={(e) => setPatientIdInput(e.target.value)}
+                      placeholder="Enter Patient ID (e.g. PID-123) for lookup…"
+                      className="w-full pl-12 pr-6 py-4 bg-slate-50 dark:bg-slate-800 border-transparent focus:border-brand-500/30 focus:bg-white dark:focus:bg-slate-900 rounded-2xl text-sm font-bold transition-all outline-none focus:ring-2 focus:ring-brand-500/20 dark:text-white uppercase"
+                      autoComplete="off"
+                    />
+                  </div>
+                </div>
+
+                <div className="col-span-2">
                   <label htmlFor="patientName" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1 cursor-pointer">Patient Full Name</label>
                   <input
                     id="patientName"
                     name="patientName"
-                    autoFocus
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}

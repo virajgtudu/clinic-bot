@@ -518,8 +518,8 @@ export default function Dashboard() {
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
         doctors={doctors}
-        onSubmit={async (name, phone, age, doctorId, time) => {
-          await addWalkIn(name, phone, age, doctorId, time);
+        onSubmit={async (name, phone, age, doctorId, time, patientId) => {
+          await addWalkIn(name, phone, age, doctorId, time, patientId);
         }}
       />
 
