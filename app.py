@@ -38,9 +38,8 @@ def admin_required(f):
             email = user.user.email
             super_admin_email = os.getenv("SUPER_ADMIN_EMAIL", "admin@clinicpro.com")
             
-            user_id = user.user.id
-            profile = db.table("profiles").select("role").eq("id", user_id).maybeSingle().execute()
-            if not profile or not profile.data or profile.data.get("role") != "admin" or email != super_admin_email:
+            profile = db.table("profiles").select("role").eq("id", user_id).limit(1).execute()
+            if not profile or not profile.data or len(profile.data) == 0 or profile.data[0].get("role") != "admin" or email != super_admin_email:
                 return jsonify({"error": "Forbidden"}), 403
                 
         except Exception as e:

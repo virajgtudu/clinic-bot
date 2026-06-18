@@ -217,17 +217,18 @@ def get_clinic_by_phone_id(phone_number_id):
             from services.database import get_db
             db = get_db()
             if db:
-                res = db.table("clinics").select("*").eq("id", lookup_key).maybeSingle().execute()
-                if res.data:
-                    c_name = res.data.get("name") or "New Clinic"
+                res = db.table("clinics").select("*").eq("id", lookup_key).limit(1).execute()
+                if res.data and len(res.data) > 0:
+                    row_data = res.data[0]
+                    c_name = row_data.get("name") or "New Clinic"
                     new_clinic = {
                         "name": c_name,
-                        "phone": res.data.get("phone", ""),
-                        "address": res.data.get("address", ""),
+                        "phone": row_data.get("phone", ""),
+                        "address": row_data.get("address", ""),
                         "webhook_verify_token": f"clinic_bot_{datetime.now().strftime('%Y%m%d')}",
-                        "subscription_status": res.data.get("subscription_status") or "trial",
-                        "monthly_fee": res.data.get("monthly_fee") or 1500,
-                        "tier": res.data.get("tier") or "Essential",
+                        "subscription_status": row_data.get("subscription_status") or "trial",
+                        "monthly_fee": row_data.get("monthly_fee") or 1500,
+                        "tier": row_data.get("tier") or "Essential",
                         "created_date": datetime.now().strftime("%Y-%m-%d"),
                         "expiry_date": f"{datetime.now().year}-12-31",
                         "doctors": [],
@@ -257,12 +258,13 @@ def get_clinic_by_phone_id(phone_number_id):
         from services.database import get_db
         db = get_db()
         if db:
-            res = db.table("clinics").select("*").eq("id", lookup_key).maybeSingle().execute()
-            if res.data:
-                item["tier"] = res.data.get("tier") or item.get("tier", "Essential")
-                item["branding_json"] = res.data.get("branding_json") or item.get("branding_json")
-                if res.data.get("name"):
-                    item["name"] = res.data["name"]
+            res = db.table("clinics").select("*").eq("id", lookup_key).limit(1).execute()
+            if res.data and len(res.data) > 0:
+                row_data = res.data[0]
+                item["tier"] = row_data.get("tier") or item.get("tier", "Essential")
+                item["branding_json"] = row_data.get("branding_json") or item.get("branding_json")
+                if row_data.get("name"):
+                    item["name"] = row_data["name"]
     except Exception as e:
         logging.debug(f"Failed to fetch single clinic from Supabase: {e}")
         
