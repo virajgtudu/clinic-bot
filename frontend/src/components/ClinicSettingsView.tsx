@@ -80,7 +80,7 @@ export function ClinicSettings({ onManageAvailability }: { onManageAvailability:
       try {
         const { data, error } = await supabase
           .from('clinics')
-          .select('branding_json, tier, name, phone, address')
+          .select('branding_json, tier, name')
           .eq('id', profile.clinic_id)
           .limit(1)
           .maybeSingle();
@@ -88,16 +88,14 @@ export function ClinicSettings({ onManageAvailability }: { onManageAvailability:
         if (data && !error) {
           setTier(data.tier || 'Essential');
           if (data.name) setClinicName(data.name);
-          if (data.phone) setClinicPhone(data.phone);
-          if (data.address) setClinicAddress(data.address);
 
           if (data.branding_json) {
             const b = data.branding_json;
             setLogoUrl(b.logo_url || '');
             setSignature(b.signature || '');
             setMarqueeText(b.marquee_text || '');
-            setClinicPhone(b.clinic_phone || data.phone || '');
-            setClinicAddress(b.clinic_address || data.address || '');
+            setClinicPhone(b.clinic_phone || '');
+            setClinicAddress(b.clinic_address || '');
             setClinicWebsite(b.clinic_website || '');
             setWelcomeMessage(b.welcome_message || '');
             
@@ -221,8 +219,6 @@ export function ClinicSettings({ onManageAvailability }: { onManageAvailability:
         .from('clinics')
         .update({ 
           name: clinicName,
-          phone: clinicPhone,
-          address: clinicAddress,
           branding_json: branding 
         })
         .eq('id', profile.clinic_id);
