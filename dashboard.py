@@ -509,6 +509,10 @@ def show_admin_panel():
                             status = "active"
                         color = "green" if status == "active" else "red"
                         st.markdown(f"**Status:** :{color}[{status.upper()}]")
+                        
+                        tier = clinic.get('tier', 'Essential')
+                        tier_color = "blue" if tier == "Essential" else "orange"
+                        st.markdown(f"**Package Tier:** :{tier_color}[{tier.upper()}]")
                     
                     with col3:
                         new_status = st.selectbox(
@@ -522,6 +526,18 @@ def show_admin_panel():
                             st.success("Updated!")
                             st.rerun()
                         
+                        new_tier = st.selectbox(
+                            "Package Tier",
+                            ["Essential", "Professional"],
+                            index=["Essential", "Professional"].index(tier),
+                            key=f"tier_{phone_id}"
+                        )
+                        if new_tier != tier:
+                            update_clinic(phone_id, {"tier": new_tier})
+                            st.success("Tier Updated!")
+                            st.rerun()
+                            
+                        st.write("")
                         if st.button("Delete", key=f"del_{phone_id}"):
                             delete_clinic(phone_id)
                             st.warning("Clinic deleted!")
@@ -633,6 +649,7 @@ def show_admin_panel():
             st.markdown("#### Subscription")
             c_fee = st.number_input("Monthly Fee (₹)", min_value=0, value=1500)
             c_status = st.selectbox("Status", ["active", "trial", "inactive"])
+            c_tier = st.selectbox("Package Tier", ["Essential", "Professional"])
             c_expiry = st.date_input("Expiry Date", datetime(2026, 12, 31))
 
             st.markdown("#### Clinic Login")
@@ -681,6 +698,7 @@ def show_admin_panel():
                         "webhook_verify_token": f"clinic_bot_{get_now().strftime('%Y%m%d')}",
                         "subscription_status": c_status,
                         "monthly_fee": c_fee,
+                        "tier": c_tier,
                         "created_date": get_now().strftime("%Y-%m-%d"),
                         "expiry_date": c_expiry.strftime("%Y-%m-%d"),
                         "doctors": doctors,

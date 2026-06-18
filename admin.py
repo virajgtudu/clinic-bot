@@ -98,6 +98,10 @@ with tab1:
                     status = clinic.get('subscription_status', 'active')
                     color = "green" if status == "active" else "red"
                     st.markdown(f"**Status:** :{color}[{status.upper()}]")
+                    
+                    tier = clinic.get('tier', 'Essential')
+                    tier_color = "blue" if tier == "Essential" else "orange"
+                    st.markdown(f"**Package Tier:** :{tier_color}[{tier.upper()}]")
                 
                 with col3:
                     new_status = st.selectbox(
@@ -111,6 +115,18 @@ with tab1:
                         st.success("Updated!")
                         st.rerun()
                     
+                    new_tier = st.selectbox(
+                        "Package Tier",
+                        ["Essential", "Professional"],
+                        index=["Essential", "Professional"].index(tier),
+                        key=f"tier_{c_id}"
+                    )
+                    if new_tier != tier:
+                        update_clinic(c_id, {"tier": new_tier})
+                        st.success("Tier Updated!")
+                        st.rerun()
+                    
+                    st.write("") # Spacer
                     if st.button("Delete", key=f"del_{c_id}"):
                         delete_clinic(c_id)
                         st.warning("Clinic deleted!")
@@ -160,6 +176,7 @@ with tab3:
         st.markdown("#### Subscription")
         c_fee = st.number_input("Monthly Fee (₹)", min_value=0, value=1500)
         c_status = st.selectbox("Status", ["active", "trial", "inactive"])
+        c_tier = st.selectbox("Package Tier", ["Essential", "Professional"])
         c_expiry = st.date_input("Expiry Date", datetime(2026, 12, 31))
         
         st.markdown("#### Doctors (at least one)")
@@ -205,6 +222,7 @@ with tab3:
                     "webhook_verify_token": f"clinic_bot_{get_now().strftime('%Y%m%d')}",
                     "subscription_status": c_status,
                     "monthly_fee": c_fee,
+                    "tier": c_tier,
                     "created_date": get_now().strftime("%Y-%m-%d"),
                     "expiry_date": c_expiry.strftime("%Y-%m-%d"),
                     "doctors": doctors,

@@ -126,13 +126,37 @@ def save_config(config):
             json.dump(config, f, indent=2)
 
 def get_all_clinics():
-    """Get list of all clinics"""
+    """Get list of all clinics, merging with Supabase table data if available"""
     config = load_config()
+    supabase_clinics = {}
+    try:
+        from services.database import get_db
+        db = get_db()
+        if db:
+            res = db.table("clinics").select("*").execute()
+            if res.data:
+                for row in res.data:
+                    supabase_clinics[str(row["id"])] = row
+    except Exception as e:
+        logging.debug(f"Failed to fetch clinics from Supabase: {e}")
+
     clinics = []
     for phone_number_id, clinic in config.items():
         item = dict(clinic)
-        item.setdefault("id", phone_number_id)
-        item.setdefault("phone_number_id", phone_number_id)
+        phone_id_str = str(phone_number_id)
+        item.setdefault("id", phone_id_str)
+        item.setdefault("phone_number_id", phone_id_str)
+        
+        # Merge Supabase data if available
+        db_clinic = supabase_clinics.get(phone_id_str)
+        if db_clinic:
+            item["tier"] = db_clinic.get("tier") or item.get("tier", "Essential")
+            item["branding_json"] = db_clinic.get("branding_json") or item.get("branding_json")
+            if "name" in db_clinic and db_clinic["name"]:
+                item["name"] = db_clinic["name"]
+        else:
+            item.setdefault("tier", "Essential")
+            
         clinics.append(item)
     return clinics
 
@@ -150,6 +174,22 @@ def get_clinic_by_phone_id(phone_number_id):
     item = dict(clinic)
     item.setdefault("id", lookup_key)
     item.setdefault("phone_number_id", lookup_key)
+    
+    # Merge Supabase data if available
+    try:
+        from services.database import get_db
+        db = get_db()
+        if db:
+            res = db.table("clinics").select("*").eq("id", lookup_key).maybeSingle().execute()
+            if res.data:
+                item["tier"] = res.data.get("tier") or item.get("tier", "Essential")
+                item["branding_json"] = res.data.get("branding_json") or item.get("branding_json")
+                if res.data.get("name"):
+                    item["name"] = res.data["name"]
+    except Exception as e:
+        logging.debug(f"Failed to fetch single clinic from Supabase: {e}")
+        
+    item.setdefault("tier", "Essential")
     return item
 
 def get_clinic(clinic_id):
@@ -207,8 +247,29 @@ def add_clinic(clinic_data):
     item["phone_number_id"] = phone_id
     item.setdefault("sheet_name", f"{item.get('name', 'clinic').lower().replace(' ', '_')}_bookings")
     item.setdefault("medicines_sheet", f"{item.get('name', 'clinic').lower().replace(' ', '_')}_medicines")
+    item.setdefault("tier", "Essential")
     config[phone_id] = item
     save_config(config)
+    
+    # Sync insert to Supabase if available
+    try:
+        from services.database import get_db
+        db = get_db()
+        if db:
+            db.table("clinics").insert({
+                "id": phone_id,
+                "name": item.get("name", "New Clinic"),
+                "tier": item.get("tier", "Essential"),
+                "branding_json": item.get("branding_json", {
+                    "logo_url": "",
+                    "primary_color": "#0ea5e9",
+                    "signature": "",
+                    "marquee_text": ""
+                })
+            }).execute()
+    except Exception as e:
+        logging.error(f"Failed to sync new clinic to Supabase: {e}")
+
     return phone_id
 
 def update_clinic(phone_number_id, updates):
@@ -219,6 +280,25 @@ def update_clinic(phone_number_id, updates):
         config[phone_number_id].update(updates)
         config[phone_number_id]["phone_number_id"] = phone_number_id
         save_config(config)
+        
+        # Sync to Supabase table if available
+        try:
+            from services.database import get_db
+            db = get_db()
+            if db:
+                db_updates = {}
+                if "name" in updates:
+                    db_updates["name"] = updates["name"]
+                if "tier" in updates:
+                    db_updates["tier"] = updates["tier"]
+                if "branding_json" in updates:
+                    db_updates["branding_json"] = updates["branding_json"]
+                
+                if db_updates:
+                    db.table("clinics").update(db_updates).eq("id", phone_number_id).execute()
+        except Exception as e:
+            logging.error(f"Failed to sync clinic updates to Supabase: {e}")
+            
         return True
     return False
 
