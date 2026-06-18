@@ -8,7 +8,8 @@ import {
   AlertCircle, 
   Stethoscope, 
   Loader2, 
-  ShieldCheck 
+  ShieldCheck,
+  Palette
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuth } from './AuthContext';
@@ -21,6 +22,89 @@ export function ClinicSettings({ onManageAvailability }: { onManageAvailability:
   const { profile } = useAuth();
   const [clinicName, setClinicName] = useState(profile?.full_name || '');
   const [isUpdating, setIsUpdating] = useState(false);
+
+  const [logoUrl, setLogoUrl] = useState('');
+  const [primaryColor, setPrimaryColor] = useState('#0ea5e9');
+  const [signature, setSignature] = useState('');
+  const [marqueeText, setMarqueeText] = useState('');
+  const [isSavingBranding, setIsSavingBranding] = useState(false);
+  const [tier, setTier] = useState('Essential');
+  const [isUpgrading, setIsUpgrading] = useState(false);
+
+  React.useEffect(() => {
+    const fetchBranding = async () => {
+      if (!profile?.clinic_id) return;
+      try {
+        const { data, error } = await supabase
+          .from('clinics')
+          .select('branding_json, tier')
+          .eq('id', profile.clinic_id)
+          .maybeSingle();
+
+        if (data && !error) {
+          setTier(data.tier || 'Essential');
+          if (data.branding_json) {
+            const b = data.branding_json;
+            setLogoUrl(b.logo_url || '');
+            setPrimaryColor(b.primary_color || '#0ea5e9');
+            setSignature(b.signature || '');
+            setMarqueeText(b.marquee_text || '');
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load branding:', err);
+      }
+    };
+    fetchBranding();
+  }, [profile?.clinic_id]);
+
+  const handleUpgrade = async () => {
+    if (!profile?.clinic_id) return;
+    setIsUpgrading(true);
+    try {
+      const { error } = await supabase
+        .from('clinics')
+        .update({ tier: 'Professional' })
+        .eq('id', profile.clinic_id);
+
+      if (error) throw error;
+      setTier('Professional');
+      alert('🎉 Congratulations! You have successfully upgraded to the Professional Package! Custom Branding features are now unlocked.');
+      window.location.reload();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to upgrade. Please ensure the database has been migrated with the tier column.');
+    } finally {
+      setIsUpgrading(false);
+    }
+  };
+
+  const handleSaveBranding = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!profile?.clinic_id) return;
+    setIsSavingBranding(true);
+    try {
+      const branding = {
+        logo_url: logoUrl,
+        primary_color: primaryColor,
+        signature,
+        marquee_text: marqueeText
+      };
+      const { error } = await supabase
+        .from('clinics')
+        .update({ branding_json: branding })
+        .eq('id', profile.clinic_id);
+
+      if (error) throw error;
+      alert('Branding updated successfully! Refreshing page to apply changes...');
+      window.location.reload();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to update branding settings. Please verify database columns.');
+    } finally {
+      setIsSavingBranding(false);
+    }
+  };
 
   const handleUpdateClinic = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,6 +170,139 @@ export function ClinicSettings({ onManageAvailability }: { onManageAvailability:
             Configure Now <ChevronRight size={14} aria-hidden="true" />
           </div>
         </button>
+      </div>
+
+      {/* Custom Branding Card */}
+      <div className="bg-white dark:bg-slate-900 p-10 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-xl relative overflow-hidden">
+        {tier !== 'Professional' && (
+          <div className="absolute inset-0 bg-white/40 dark:bg-slate-900/60 backdrop-blur-md z-20 flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-300">
+            <div className="w-16 h-16 bg-gradient-to-br from-brand-500 to-indigo-500 rounded-3xl flex items-center justify-center text-white mb-6 shadow-xl shadow-brand-500/25">
+              <Palette size={28} />
+            </div>
+            <span className="px-4 py-1.5 bg-brand-100 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400 text-[10px] font-black rounded-full border border-brand-100 dark:border-brand-900/50 uppercase tracking-widest mb-3">
+              Professional Package Exclusive
+            </span>
+            <h3 className="text-3xl font-black dark:text-white tracking-tight max-w-md leading-tight">
+              Unlock Custom Branding & White-Labeling
+            </h3>
+            <p className="text-slate-500 dark:text-slate-400 text-sm font-medium max-w-sm mt-3 leading-relaxed">
+              Design a cohesive experience for your patients. Upload your clinic logo, pick custom theme colors, customize WhatsApp footers, and show live marquee messages.
+            </p>
+            <button 
+              type="button"
+              onClick={handleUpgrade}
+              disabled={isUpgrading}
+              className="mt-8 px-10 py-4 bg-brand-500 text-white font-black rounded-2xl hover:bg-brand-600 transition-all shadow-xl shadow-brand-500/25 active:scale-95 flex items-center gap-2 outline-none focus-visible:ring-4 focus-visible:ring-brand-500/50"
+            >
+              {isUpgrading ? <Loader2 className="animate-spin" size={18} /> : 'Upgrade to Professional'}
+            </button>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-brand-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-brand-500/20">
+              <Palette size={24} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-2xl font-black dark:text-white tracking-tight">Custom Branding</h2>
+                {tier === 'Professional' && (
+                  <span className="px-2.5 py-0.5 bg-emerald-100 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 text-[8px] font-black rounded-full border border-emerald-200 dark:border-emerald-900/30 uppercase tracking-wider">
+                    Professional Plan
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">White-label Patient Touchpoints</p>
+            </div>
+          </div>
+        </div>
+
+        <form onSubmit={handleSaveBranding} className="mt-8 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label htmlFor="logoUrl" className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 cursor-pointer">Clinic Logo URL</label>
+              <input 
+                id="logoUrl"
+                name="logoUrl"
+                type="url" 
+                value={logoUrl} 
+                onChange={e => setLogoUrl(e.target.value)} 
+                placeholder="https://example.com/logo.png"
+                disabled={tier !== 'Professional'}
+                className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-brand-500/20 transition-all outline-none dark:text-white"
+              />
+              {logoUrl && (
+                <div className="mt-2 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl flex items-center gap-3 w-fit border border-slate-100 dark:border-slate-800">
+                  <span className="text-[9px] font-black uppercase text-slate-400">Logo Preview:</span>
+                  <img src={logoUrl} alt="Logo Preview" className="h-8 max-w-[150px] object-contain rounded-md" onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }} />
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="primaryColor" className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 cursor-pointer">Primary Theme Color</label>
+              <div className="flex gap-4 items-center">
+                <input 
+                  id="primaryColorPicker"
+                  type="color" 
+                  value={primaryColor} 
+                  onChange={e => setPrimaryColor(e.target.value)} 
+                  disabled={tier !== 'Professional'}
+                  className="w-16 h-14 bg-transparent border-0 rounded-2xl cursor-pointer p-0 shrink-0"
+                />
+                <input 
+                  id="primaryColor"
+                  name="primaryColor"
+                  type="text" 
+                  value={primaryColor} 
+                  onChange={e => setPrimaryColor(e.target.value)} 
+                  placeholder="#0ea5e9"
+                  disabled={tier !== 'Professional'}
+                  className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-brand-500/20 transition-all outline-none dark:text-white uppercase"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <label htmlFor="whatsappSignature" className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 cursor-pointer">WhatsApp Message Signature</label>
+              <input 
+                id="whatsappSignature"
+                name="whatsappSignature"
+                type="text" 
+                value={signature} 
+                onChange={e => setSignature(e.target.value)} 
+                placeholder="e.g. Regards, Apollo Health Clinic"
+                disabled={tier !== 'Professional'}
+                className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-brand-500/20 transition-all outline-none dark:text-white"
+              />
+              <p className="text-[9px] text-slate-400 ml-1 font-bold uppercase tracking-wider">Automatically appended as a footer to all outgoing patient reminder messages.</p>
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <label htmlFor="marqueeText" className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 cursor-pointer">Waiting Room TV Marquee Announcement</label>
+              <input 
+                id="marqueeText"
+                name="marqueeText"
+                type="text" 
+                value={marqueeText} 
+                onChange={e => setMarqueeText(e.target.value)} 
+                placeholder="e.g. HEALTH UPDATE: DEAR PATIENTS, WE NOW OFFER FREE DENTAL CHECK-UPS EVERY SUNDAY!"
+                disabled={tier !== 'Professional'}
+                className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-brand-500/20 transition-all outline-none dark:text-white"
+              />
+              <p className="text-[9px] text-slate-400 ml-1 font-bold uppercase tracking-wider">A horizontal scrolling announcement bar displayed at the bottom of the live queue board screen.</p>
+            </div>
+          </div>
+
+          <button 
+            type="submit" 
+            disabled={isSavingBranding || tier !== 'Professional'}
+            className="w-full md:w-auto px-8 py-4 bg-brand-500 hover:bg-brand-600 text-white font-black rounded-2xl transition-all shadow-lg shadow-brand-500/25 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 outline-none focus-visible:ring-4 focus-visible:ring-brand-500/50"
+          >
+            {isSavingBranding ? <Loader2 className="animate-spin" size={20} aria-hidden="true" /> : 'Save Branding Configurations'}
+          </button>
+        </form>
       </div>
 
       <DoctorSettings />

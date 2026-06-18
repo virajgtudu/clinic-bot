@@ -421,6 +421,13 @@ def send_whatsapp(clinic, phone, message, buttons=None):
             st.error("WhatsApp Access Token is missing for this clinic. Please check your Render environment variables.")
             return False
             
+        # Append branding signature if available in professional package
+        branding = clinic.get("branding_json")
+        if branding and isinstance(branding, dict):
+            sig = branding.get("signature")
+            if sig:
+                message = f"{message}\n\n{sig}"
+
         clean_num = clean_phone_number(phone)
         logger.info(f"Manual WhatsApp attempt to {clean_num} (original: {phone}) for clinic {clinic.get('id')}")
         if buttons:

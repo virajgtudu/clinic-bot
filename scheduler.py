@@ -175,6 +175,13 @@ def send_whatsapp(clinic, phone, message, buttons=None):
     if not clinic:
         return False
     try:
+        # Append branding signature if available in professional package
+        branding = clinic.get("branding_json")
+        if branding and isinstance(branding, dict):
+            sig = branding.get("signature")
+            if sig:
+                message = f"{message}\n\n{sig}"
+
         if buttons:
             send_buttons(clinic, phone, message, buttons)
         else:

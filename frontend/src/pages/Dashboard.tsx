@@ -38,6 +38,7 @@ import { AppointmentsView } from '../components/AppointmentsView';
 import { AnalyticsView } from '../components/AnalyticsView';
 import { ClinicSettings } from '../components/ClinicSettingsView';
 import { SetupClinic } from '../components/SetupClinic';
+import { supabase } from '../lib/supabase';
 
 
 type DashboardView = 'queue' | 'appointments' | 'patients' | 'reminders' | 'analytics' | 'settings' | 'doctor_availability';
@@ -54,16 +55,66 @@ export default function Dashboard() {
   const [followUpPatient, setFollowUpPatient] = useState<any>(null);
   const [isDoctorSelectOpen, setIsDoctorSelectOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [branding, setBranding] = useState<any>(null);
+
+  React.useEffect(() => {
+    const loadBranding = async () => {
+      if (!profile?.clinic_id) return;
+      try {
+        const { data } = await supabase
+          .from('clinics')
+          .select('branding_json, tier')
+          .eq('id', profile.clinic_id)
+          .maybeSingle();
+        if (data?.tier === 'Professional' && data?.branding_json) {
+          setBranding(data.branding_json);
+        } else {
+          setBranding(null);
+        }
+      } catch (err) {
+        console.error('Error loading branding:', err);
+      }
+    };
+    loadBranding();
+  }, [profile?.clinic_id]);
+
+  React.useEffect(() => {
+    if (branding?.primary_color) {
+      const hexToRgbStr = (hex: string) => {
+        let c = hex.substring(1);
+        if (c.length === 3) c = c[0] + c[0] + c[1] + c[1] + c[2] + c[2];
+        const r = parseInt(c.substring(0, 2), 16);
+        const g = parseInt(c.substring(2, 4), 16);
+        const b = parseInt(c.substring(4, 6), 16);
+        return `${r} ${g} ${b}`;
+      };
+      
+      try {
+        const rgbStr = hexToRgbStr(branding.primary_color);
+        document.documentElement.style.setProperty('--brand-500', rgbStr);
+      } catch (e) {
+        console.error('Failed to parse primary color:', e);
+      }
+    } else {
+      document.documentElement.style.setProperty('--brand-500', '14 165 233');
+    }
+  }, [branding]);
 
   const renderSidebarContent = () => (
     <div className="flex flex-col h-full bg-white dark:bg-slate-900">
       <div className="p-8 flex-1 overflow-y-auto">
         <div className="flex items-center justify-between mb-10">
-          <div className="flex items-center gap-3 group cursor-pointer">
-            <div className="w-10 h-10 bg-gradient-to-br from-brand-500 to-brand-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-brand-500/20 group-hover:scale-110 transition-transform duration-300">
-              <Stethoscope size={22} strokeWidth={2.5} />
-            </div>
-            <span className="text-2xl font-black tracking-tight dark:text-white bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-600 dark:from-white dark:to-slate-400">ClinicPRO</span>
+          <div className="flex items-center gap-3 mb-10 group cursor-pointer">
+            {branding?.logo_url ? (
+              <img src={branding.logo_url} alt="Logo" className="w-10 h-10 object-contain rounded-xl" />
+            ) : (
+              <div className="w-10 h-10 bg-gradient-to-br from-brand-500 to-brand-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-brand-500/20 group-hover:scale-110 transition-transform duration-300">
+                <Stethoscope size={22} strokeWidth={2.5} />
+              </div>
+            )}
+            <span className="text-2xl font-black tracking-tight dark:text-white bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-600 dark:from-white dark:to-slate-400">
+              {branding?.logo_url ? profile?.full_name || 'Clinic' : 'ClinicPRO'}
+            </span>
           </div>
           <button 
             className="lg:hidden text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
@@ -237,10 +288,16 @@ export default function Dashboard() {
               <Menu size={20} />
             </button>
             <div className="lg:hidden flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-brand-500 to-brand-600 rounded-lg flex items-center justify-center text-white shadow-md shadow-brand-500/20">
-                <Stethoscope size={18} strokeWidth={2.5} />
-              </div>
-              <span className="text-lg font-black tracking-tight dark:text-white">ClinicPRO</span>
+              {branding?.logo_url ? (
+                <img src={branding.logo_url} alt="Logo" className="w-8 h-8 object-contain rounded-lg shadow-sm" />
+              ) : (
+                <div className="w-8 h-8 bg-gradient-to-br from-brand-500 to-brand-600 rounded-lg flex items-center justify-center text-white shadow-md shadow-brand-500/20">
+                  <Stethoscope size={18} strokeWidth={2.5} />
+                </div>
+              )}
+              <span className="text-lg font-black tracking-tight dark:text-white truncate max-w-[120px]">
+                {branding?.logo_url ? profile?.full_name || 'Clinic' : 'ClinicPRO'}
+              </span>
             </div>
             
             <div className="relative w-[400px] group hidden md:block">
@@ -494,6 +551,13 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
+              {branding?.marquee_text && (
+                <div className="bg-slate-900 dark:bg-slate-950 text-brand-500 py-4 px-6 rounded-3xl overflow-hidden relative shadow-lg border border-slate-800/80">
+                  <div className="animate-marquee whitespace-nowrap font-black text-xs uppercase tracking-[0.2em]">
+                    📢 {branding.marquee_text}
+                  </div>
+                </div>
+              )}
             </>
           )}
 

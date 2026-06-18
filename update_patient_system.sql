@@ -1,5 +1,16 @@
 -- ULTIMATE MIGRATION: Advanced Patient Tracking & Chronological Tokening
 
+-- 0. Add custom branding support to the clinics table
+ALTER TABLE clinics ADD COLUMN IF NOT EXISTS branding_json JSONB DEFAULT '{
+  "logo_url": "",
+  "primary_color": "#0ea5e9",
+  "signature": "",
+  "marquee_text": ""
+}';
+
+-- Add subscription tier column (Essential vs Professional package)
+ALTER TABLE clinics ADD COLUMN IF NOT EXISTS tier TEXT DEFAULT 'Essential';
+
 -- 1. Create a sequence for Patient IDs
 CREATE SEQUENCE IF NOT EXISTS patient_id_seq START WITH 1001;
 
