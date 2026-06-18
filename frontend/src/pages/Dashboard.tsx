@@ -16,7 +16,9 @@ import {
   Activity,
   Stethoscope,
   LogOut,
-  Loader2
+  Loader2,
+  Menu,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../lib/utils';
@@ -51,6 +53,80 @@ export default function Dashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [followUpPatient, setFollowUpPatient] = useState<any>(null);
   const [isDoctorSelectOpen, setIsDoctorSelectOpen] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  const renderSidebarContent = () => (
+    <div className="flex flex-col h-full bg-white dark:bg-slate-900">
+      <div className="p-8 flex-1 overflow-y-auto">
+        <div className="flex items-center justify-between mb-10">
+          <div className="flex items-center gap-3 group cursor-pointer">
+            <div className="w-10 h-10 bg-gradient-to-br from-brand-500 to-brand-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-brand-500/20 group-hover:scale-110 transition-transform duration-300">
+              <Stethoscope size={22} strokeWidth={2.5} />
+            </div>
+            <span className="text-2xl font-black tracking-tight dark:text-white bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-600 dark:from-white dark:to-slate-400">ClinicPRO</span>
+          </div>
+          <button 
+            className="lg:hidden text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+            onClick={() => setIsMobileSidebarOpen(false)}
+          >
+            <X size={20} />
+          </button>
+        </div>
+        
+        <nav className="space-y-1.5">
+          <NavItem 
+            icon={<LayoutDashboard size={20} />} 
+            label="Queue Management" 
+            active={activeView === 'queue'} 
+            onClick={() => { setActiveView('queue'); setIsMobileSidebarOpen(false); }}
+          />
+          <NavItem 
+            icon={<Calendar size={20} />} 
+            label="Appointments" 
+            active={activeView === 'appointments'} 
+            onClick={() => { setActiveView('appointments'); setIsMobileSidebarOpen(false); }}
+          />
+          <NavItem 
+            icon={<Users size={20} />} 
+            label="Patients & History" 
+            active={activeView === 'patients'} 
+            onClick={() => { setActiveView('patients'); setIsMobileSidebarOpen(false); }}
+          />
+          <NavItem 
+            icon={<Bell size={20} />} 
+            label="Reminders" 
+            active={activeView === 'reminders'} 
+            onClick={() => { setActiveView('reminders'); setIsMobileSidebarOpen(false); }}
+          />
+          <NavItem 
+            icon={<BarChart3 size={20} />} 
+            label="Analytics" 
+            active={activeView === 'analytics'} 
+            onClick={() => { setActiveView('analytics'); setIsMobileSidebarOpen(false); }}
+          />
+          <NavItem 
+            icon={<Settings size={20} />} 
+            label="Settings" 
+            active={activeView === 'settings'} 
+            onClick={() => { setActiveView('settings'); setIsMobileSidebarOpen(false); }}
+          />
+        </nav>
+      </div>
+      
+      <div className="p-6 space-y-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/20">
+        <div className="p-5 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 rounded-3xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm relative overflow-hidden group text-center">
+           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Authenticated as</p>
+           <p className="text-xs font-bold dark:text-white truncate mb-4">{user?.email}</p>
+           <button 
+             onClick={handleSignOut}
+             className="w-full py-2.5 text-xs font-bold text-rose-500 bg-rose-50 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/50 rounded-2xl hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-all flex items-center justify-center gap-2"
+           >
+             <LogOut size={14} /> Sign Out
+           </button>
+        </div>
+      </div>
+    </div>
+  );
 
   const handleNextPatientClick = () => {
     if (doctors.length === 1) {
@@ -117,92 +193,77 @@ export default function Dashboard() {
         <div className="absolute top-[20%] -right-[5%] w-[30%] h-[30%] bg-emerald-500/5 blur-[100px] rounded-full" />
       </div>
 
-      {/* Sidebar */}
-      <aside className="w-72 bg-white/70 dark:bg-slate-900/50 backdrop-blur-xl border-r border-slate-200/60 dark:border-slate-800/60 flex flex-col z-20">
-        <div className="p-8">
-          <div className="flex items-center gap-3 mb-10 group cursor-pointer">
-            <div className="w-10 h-10 bg-gradient-to-br from-brand-500 to-brand-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-brand-500/20 group-hover:scale-110 transition-transform duration-300">
-              <Stethoscope size={22} strokeWidth={2.5} />
-            </div>
-            <span className="text-2xl font-black tracking-tight dark:text-white bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-600 dark:from-white dark:to-slate-400">ClinicPRO</span>
-          </div>
-          
-          <nav className="space-y-1.5">
-            <NavItem 
-              icon={<LayoutDashboard size={20} />} 
-              label="Queue Management" 
-              active={activeView === 'queue'} 
-              onClick={() => setActiveView('queue')}
-            />
-            <NavItem 
-              icon={<Calendar size={20} />} 
-              label="Appointments" 
-              active={activeView === 'appointments'} 
-              onClick={() => setActiveView('appointments')}
-            />
-            <NavItem 
-              icon={<Users size={20} />} 
-              label="Patients & History" 
-              active={activeView === 'patients'} 
-              onClick={() => setActiveView('patients')}
-            />
-            <NavItem 
-              icon={<Bell size={20} />} 
-              label="Reminders" 
-              active={activeView === 'reminders'} 
-              onClick={() => setActiveView('reminders')}
-            />
-            <NavItem 
-              icon={<BarChart3 size={20} />} 
-              label="Analytics" 
-              active={activeView === 'analytics'} 
-              onClick={() => setActiveView('analytics')}
-            />
-            <NavItem 
-              icon={<Settings size={20} />} 
-              label="Settings" 
-              active={activeView === 'settings'} 
-              onClick={() => setActiveView('settings')}
-            />
-          </nav>
-        </div>
-        
-        <div className="mt-auto p-6 space-y-4">
-          <div className="p-5 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 rounded-3xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm relative overflow-hidden group text-center">
-             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Authenticated as</p>
-             <p className="text-xs font-bold dark:text-white truncate mb-4">{user?.email}</p>
-             <button 
-               onClick={handleSignOut}
-               className="w-full py-2.5 text-xs font-bold text-rose-500 bg-rose-50 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/50 rounded-2xl hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-all flex items-center justify-center gap-2"
-             >
-               <LogOut size={14} /> Sign Out
-             </button>
-          </div>
-        </div>
+      {/* Sidebar for Desktop */}
+      <aside className="w-72 bg-white/70 dark:bg-slate-900/50 backdrop-blur-xl border-r border-slate-200/60 dark:border-slate-800/60 hidden lg:flex flex-col shrink-0 z-20">
+        {renderSidebarContent()}
       </aside>
+
+      {/* Mobile Sidebar Overlay Drawer */}
+      <AnimatePresence>
+        {isMobileSidebarOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMobileSidebarOpen(false)}
+              className="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-sm lg:hidden"
+            />
+            {/* Sidebar Drawer */}
+            <motion.aside
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed inset-y-0 left-0 z-50 w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col lg:hidden"
+            >
+              {renderSidebarContent()}
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col overflow-hidden relative">
         {/* Header */}
-        <header className="h-24 bg-white/40 dark:bg-slate-950/40 backdrop-blur-md border-b border-slate-200/60 dark:border-slate-800/60 flex items-center justify-between px-10 z-10">
-          <div className="relative w-[400px] group">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-500 transition-colors" size={18} />
-            <input 
-              type="text" 
-              placeholder="Search patients, tokens, or history..." 
-              className="w-full pl-12 pr-6 py-3 bg-slate-100/50 dark:bg-slate-800/50 border-transparent focus:border-brand-500/30 focus:bg-white dark:focus:bg-slate-900 rounded-[1.25rem] text-sm font-medium transition-all focus:ring-4 focus:ring-brand-500/5 dark:text-white outline-none"
-            />
+        <header className="h-20 bg-white/40 dark:bg-slate-950/40 backdrop-blur-md border-b border-slate-200/60 dark:border-slate-800/60 flex items-center justify-between px-4 md:px-10 z-10 shrink-0">
+          {/* Left: Mobile hamburger menu toggle & Desktop Search bar */}
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setIsMobileSidebarOpen(true)}
+              className="lg:hidden p-2.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all"
+            >
+              <Menu size={20} />
+            </button>
+            <div className="lg:hidden flex items-center gap-2">
+              <div className="w-8 h-8 bg-gradient-to-br from-brand-500 to-brand-600 rounded-lg flex items-center justify-center text-white shadow-md shadow-brand-500/20">
+                <Stethoscope size={18} strokeWidth={2.5} />
+              </div>
+              <span className="text-lg font-black tracking-tight dark:text-white">ClinicPRO</span>
+            </div>
+            
+            <div className="relative w-[400px] group hidden md:block">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-500 transition-colors" size={18} />
+              <input 
+                type="text" 
+                placeholder="Search patients, tokens, or history..." 
+                className="w-full pl-12 pr-6 py-3 bg-slate-100/50 dark:bg-slate-800/50 border-transparent focus:border-brand-500/30 focus:bg-white dark:focus:bg-slate-900 rounded-[1.25rem] text-sm font-medium transition-all focus:ring-4 focus:ring-brand-500/5 dark:text-white outline-none"
+              />
+            </div>
           </div>
 
-          <div className="flex items-center gap-6">
+          {/* Right: WhatsApp status & user profile */}
+          <div className="flex items-center gap-3 md:gap-6">
             {/* WhatsApp Status */}
             <div className={cn(
-                "flex items-center gap-2.5 px-4 py-2 rounded-full text-xs font-bold transition-all shadow-sm ring-1",
+                "flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full text-xs font-bold transition-all shadow-sm ring-1",
                 whatsappStatus === 'Connected' && "bg-emerald-50 text-emerald-600 ring-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:ring-emerald-900/50",
                 whatsappStatus === 'Connecting' && "bg-amber-50 text-amber-600 ring-amber-100 dark:bg-amber-950/30 dark:text-amber-400 dark:ring-amber-900/50",
                 whatsappStatus === 'Error' && "bg-rose-50 text-rose-600 ring-rose-100 dark:bg-rose-950/30 dark:text-rose-400 dark:ring-rose-900/50",
                 whatsappStatus === 'Disconnected' && "bg-slate-50 text-slate-500 ring-slate-100 dark:bg-slate-900 dark:text-slate-400 dark:ring-slate-800"
               )}
+              title={`WhatsApp: ${whatsappStatus}`}
             >
               <div className={cn(
                 "w-2 h-2 rounded-full ring-4",
@@ -211,31 +272,41 @@ export default function Dashboard() {
                 whatsappStatus === 'Error' && "bg-rose-500 ring-rose-500/20",
                 whatsappStatus === 'Disconnected' && "bg-slate-400 ring-slate-400/20"
               )} />
-              WhatsApp: {whatsappStatus}
+              <span className="hidden sm:inline">WhatsApp: {whatsappStatus}</span>
             </div>
 
-            <div className="h-8 w-[1px] bg-slate-200 dark:bg-slate-800" />
+            <div className="h-8 w-[1px] bg-slate-200 dark:bg-slate-800 hidden sm:block" />
 
             <ThemeToggle />
 
             <div className="flex items-center gap-3 pl-2 group cursor-pointer">
-              <div className="text-right">
+              <div className="text-right hidden md:block">
                 <p className="text-sm font-bold dark:text-white group-hover:text-brand-500 transition-colors">{profile?.full_name || 'Clinic Admin'}</p>
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{profile?.role || 'Administrator'}</p>
               </div>
-              <div className="w-11 h-11 rounded-[1rem] bg-gradient-to-br from-brand-500 to-brand-700 p-[2px] shadow-lg shadow-brand-500/20 group-hover:rotate-6 transition-transform">
-                <img className="w-full h-full rounded-[0.9rem] object-cover bg-white" src={`https://ui-avatars.com/api/?name=${encodeURIComponent(profile?.full_name || 'Clinic Admin')}&background=fff&color=0ea5e9`} alt="Profile" />
+              <div className="w-9 h-9 md:w-11 md:h-11 rounded-xl md:rounded-[1rem] bg-gradient-to-br from-brand-500 to-brand-700 p-[2px] shadow-lg shadow-brand-500/20 group-hover:rotate-6 transition-transform">
+                <img className="w-full h-full rounded-[0.55rem] md:rounded-[0.9rem] object-cover bg-white" src={`https://ui-avatars.com/api/?name=${encodeURIComponent(profile?.full_name || 'Clinic Admin')}&background=fff&color=0ea5e9`} alt="Profile" />
               </div>
             </div>
           </div>
         </header>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-10 space-y-10 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-4 md:p-10 space-y-6 md:space-y-10 custom-scrollbar">
+          {/* Mobile Search Bar */}
+          <div className="md:hidden relative w-full group">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-500 transition-colors" size={18} />
+            <input 
+              type="text" 
+              placeholder="Search patients, tokens, or history..." 
+              className="w-full pl-12 pr-6 py-3 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 focus:border-brand-500/30 focus:bg-white dark:focus:bg-slate-900 rounded-[1.25rem] text-sm font-medium transition-all focus:ring-4 focus:ring-brand-500/5 dark:text-white outline-none shadow-sm"
+            />
+          </div>
+
           {activeView === 'queue' && (
             <>
               {/* Top Metrics */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-8">
                 <MetricCard 
                   label="Today's Appointments" 
                   value={queue.length.toString()} 
@@ -292,7 +363,7 @@ export default function Dashboard() {
                             <motion.div 
                               key={patient.id} 
                               layout
-                              className="bg-white dark:bg-slate-900 p-5 rounded-2xl flex items-center justify-between shadow-md border border-rose-100/50 dark:border-rose-900/20 group hover:scale-[1.01] transition-transform"
+                              className="bg-white dark:bg-slate-900 p-4 md:p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md border border-rose-100/50 dark:border-rose-900/20 group hover:scale-[1.01] transition-transform"
                             >
                               <div className="flex items-center gap-5">
                                 <div className="flex items-baseline gap-2">
@@ -321,8 +392,8 @@ export default function Dashboard() {
                   </AnimatePresence>
 
                   {/* Waiting List */}
-                  <div className="bg-white dark:bg-slate-900 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-xl shadow-slate-200/30 dark:shadow-none overflow-hidden group/list">
-                    <div className="p-10 border-b border-slate-50 dark:border-slate-800 flex items-center justify-between bg-slate-50/30 dark:bg-slate-900/30">
+                  <div className="bg-white dark:bg-slate-900 rounded-3xl md:rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-xl shadow-slate-200/30 dark:shadow-none overflow-hidden group/list">
+                    <div className="p-6 md:p-10 border-b border-slate-50 dark:border-slate-800 flex items-center justify-between bg-slate-50/30 dark:bg-slate-900/30">
                       <div>
                         <h3 className="font-black text-xl text-slate-800 dark:text-white tracking-tight">Upcoming Queue</h3>
                         <p className="text-xs text-slate-500 font-medium mt-1">Real-time patient flow monitoring</p>
@@ -524,7 +595,7 @@ function NavItem({ icon, label, active = false, onClick }: { icon: React.ReactNo
 function MetricCard({ label, value, trend, highlight = false, icon }: { label: string, value: string, trend?: string, highlight?: boolean, icon: React.ReactNode }) {
   return (
     <div className={cn(
-      "p-8 rounded-[2.5rem] border shadow-xl transition-all duration-500 relative overflow-hidden group hover:-translate-y-2",
+      "p-6 md:p-8 rounded-3xl md:rounded-[2.5rem] border shadow-xl transition-all duration-500 relative overflow-hidden group hover:-translate-y-2",
       highlight 
         ? "bg-gradient-to-br from-brand-600 to-brand-700 border-brand-500 text-white shadow-brand-500/20" 
         : "bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 shadow-slate-200/50 dark:shadow-none"

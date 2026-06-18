@@ -195,10 +195,9 @@ Thank you,
         />
       </div>
 
-      {/* Filters & Table */}
       <div className="bg-white dark:bg-slate-900/50 backdrop-blur-xl border border-slate-200/60 dark:border-slate-800/60 rounded-[2.5rem] overflow-hidden shadow-sm">
-        <div className="p-8 border-b border-slate-200/60 dark:border-slate-800/60 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="flex items-center gap-2 bg-slate-100/50 dark:bg-slate-800/50 p-1.5 rounded-2xl w-fit">
+        <div className="p-4 md:p-8 border-b border-slate-200/60 dark:border-slate-800/60 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          <div className="flex items-center gap-2 bg-slate-100/50 dark:bg-slate-800/50 p-1.5 rounded-2xl w-full lg:w-fit overflow-x-auto no-scrollbar whitespace-nowrap">
             <FilterButton active={filter === 'all'} onClick={() => setFilter('all')} label="All" />
             <FilterButton active={filter === 'medication'} onClick={() => setFilter('medication')} label="Medications" />
             <FilterButton active={filter === 'test'} onClick={() => setFilter('test')} label="Tests" />
