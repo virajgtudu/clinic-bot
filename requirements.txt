@@ -5,9 +5,8 @@ requests
 gspread
 oauth2client
 google-api-python-client
-streamlit
-pandas
 apscheduler
-supabase
+supabase==2.31.0
+websockets==14.0
 pytz
 flask-cors

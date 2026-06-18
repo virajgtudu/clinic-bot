@@ -38,6 +38,7 @@ import { AppointmentsView } from '../components/AppointmentsView';
 import { AnalyticsView } from '../components/AnalyticsView';
 import { ClinicSettings } from '../components/ClinicSettingsView';
 import { SetupClinic } from '../components/SetupClinic';
+import { SuperAdminView } from '../components/SuperAdminView';
 import { supabase } from '../lib/supabase';
 
 
@@ -231,6 +232,22 @@ export default function Dashboard() {
       await signOut();
     }
   };
+
+  if (user && !profile) {
+    return (
+      <div className="min-h-screen bg-[#f8fafc] dark:bg-[#020617] flex flex-col items-center justify-center gap-4 transition-colors duration-500">
+        <Loader2 className="animate-spin text-brand-500" size={48} />
+        <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Loading profile...</p>
+      </div>
+    );
+  }
+
+  const superAdminEmail = import.meta.env.VITE_SUPER_ADMIN_EMAIL || 'admin@clinicpro.com';
+  const isSuperAdmin = profile?.role === 'admin' && user?.email === superAdminEmail;
+  if (isSuperAdmin) {
+    return <SuperAdminView />;
+  }
+
 
   if (!loading && !profile?.clinic_id) {
     return <SetupClinic />;

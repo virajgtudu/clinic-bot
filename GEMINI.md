@@ -5,9 +5,8 @@ ClinicPRO is a professional, multi-tenant clinic management platform. It integra
 
 ## Architecture
 - **Backend:** Flask (`app.py`) handles WhatsApp webhooks via Meta Graph API, exposes REST API endpoints for the frontend (e.g. manual-remind), manages CORS, and hosts the integrated Background Scheduler (APScheduler).
-- **Admin Dashboards:**
-    - **Streamlit:** (`dashboard.py`) Primary tool for clinic staff to manage real-time queues, set reminders, and view analytics.
-    - **React:** (`frontend/`) High-fidelity dashboard for monitoring and doctor management. Connects to the Flask backend via `VITE_API_URL` to trigger live WhatsApp messages.
+- **Frontend Dashboard:**
+    - **React:** (`frontend/`) High-fidelity dashboard for clinic administrators and staff. Features real-time queue views, patient analytics, doctor schedules, automated reminders management, and platform administration. Connects to the Flask backend via `VITE_API_URL` to trigger live WhatsApp messages.
 - **Primary Database:** Supabase (PostgreSQL) handles:
     - **Real-time Queue:** `appointments` table with Postgres Changes subscription.
     - **Atomic Token Generation:** `create_appointment` RPC function.
@@ -21,7 +20,7 @@ ClinicPRO is a professional, multi-tenant clinic management platform. It integra
 - **Doctor Management:** UI-driven management of doctors, specialties, and session timings/slots.
 - **Initials-based Tokens:** Sequential tokens per doctor/date using first and last initials (e.g., `PJ-001` for Dr. Prabhat Jain).
 - **Automated Reminders:** Medication (interactive buttons), Test, and Follow-up reminders delivered via WhatsApp. Reminders are dual-synced between Supabase and Sheets.
-- **Manual Control:** Instant "Remind" functionality allows staff to bypass automated schedules for immediate patient notification. Both Streamlit and React dashboards can trigger these WhatsApp messages securely through the backend API.
+- **Manual Control:** Instant "Remind" functionality allows staff to bypass automated schedules for immediate patient notification. The React dashboard can trigger these WhatsApp messages securely through the backend API.
 - **Live Analytics:** Dynamic calculation of average wait times and peak traffic visualization.
 
 ## Conventions & Standards
@@ -43,7 +42,6 @@ ClinicPRO is a professional, multi-tenant clinic management platform. It integra
 
 ## Development Workflow
 - **Running Backend + Reminders:** `python app.py`
-- **Running Admin Dashboard:** `streamlit run dashboard.py`
 - **Running React Frontend:** 
   Ensure `VITE_API_URL` is set in your frontend `.env` to point to the Flask backend.
   ```bash

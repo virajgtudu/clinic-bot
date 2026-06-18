@@ -35,13 +35,6 @@ export default function LandingPage() {
           <Link 
             to="/" 
             className="flex items-center gap-2 group"
-            onClick={(e) => {
-              if (e.detail === 3) {
-                e.preventDefault();
-                const dashboardUrl = import.meta.env.VITE_DASHBOARD_URL || 'http://localhost:8501';
-                window.open(dashboardUrl, '_blank');
-              }
-            }}
           >
             <div className="w-10 h-10 bg-gradient-to-br from-brand-500 to-brand-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-brand-500/20 group-hover:scale-110 transition-transform">
               <Stethoscope size={22} strokeWidth={2.5} />
@@ -276,15 +269,13 @@ export default function LandingPage() {
             <div className="flex gap-8 items-center">
               <span>System Status: <span className="text-emerald-500">Normal</span></span>
               <span>Uptime: 99.9%</span>
-              <a 
-                href={import.meta.env.VITE_DASHBOARD_URL || 'http://localhost:8501'} 
-                target="_blank" 
-                rel="noopener noreferrer"
+              <Link 
+                to="/login"
                 className="opacity-20 hover:opacity-100 transition-opacity text-slate-500 dark:text-slate-400 cursor-pointer text-xs ml-1"
                 title="System Admin Portal"
               >
                 🔑
-              </a>
+              </Link>
             </div>
           </div>
         </div>

@@ -140,6 +140,33 @@ def get_all_clinics():
     except Exception as e:
         logging.debug(f"Failed to fetch clinics from Supabase: {e}")
 
+    # Synchronize: If a clinic is in Supabase but not in config, add it!
+    config_changed = False
+    for phone_id_str, db_clinic in supabase_clinics.items():
+        if phone_id_str not in config:
+            c_name = db_clinic.get("name") or "New Clinic"
+            config[phone_id_str] = {
+                "name": c_name,
+                "phone": db_clinic.get("phone", ""),
+                "address": db_clinic.get("address", ""),
+                "webhook_verify_token": f"clinic_bot_{datetime.now().strftime('%Y%m%d')}",
+                "subscription_status": db_clinic.get("subscription_status") or "trial",
+                "monthly_fee": db_clinic.get("monthly_fee") or 1500,
+                "tier": db_clinic.get("tier") or "Essential",
+                "created_date": datetime.now().strftime("%Y-%m-%d"),
+                "expiry_date": f"{datetime.now().year}-12-31",
+                "doctors": [],
+                "sheet_name": f"{c_name.lower().replace(' ', '_')}_bookings",
+                "medicines_sheet": f"{c_name.lower().replace(' ', '_')}_medicines",
+                "whatsapp_token_env": f"WHATSAPP_TOKEN_{phone_id_str}",
+                "phone_number_id": phone_id_str
+            }
+            config_changed = True
+            logging.info(f"Auto-imported clinic '{c_name}' ({phone_id_str}) from Supabase to local config.")
+
+    if config_changed:
+        save_config(config)
+
     clinics = []
     for phone_number_id, clinic in config.items():
         item = dict(clinic)
@@ -166,6 +193,38 @@ def get_clinic_by_phone_id(phone_number_id):
     lookup_key = str(phone_number_id)
     clinic = config.get(lookup_key)
     
+    if not clinic:
+        # Check if it exists in Supabase
+        try:
+            from services.database import get_db
+            db = get_db()
+            if db:
+                res = db.table("clinics").select("*").eq("id", lookup_key).maybeSingle().execute()
+                if res.data:
+                    c_name = res.data.get("name") or "New Clinic"
+                    new_clinic = {
+                        "name": c_name,
+                        "phone": res.data.get("phone", ""),
+                        "address": res.data.get("address", ""),
+                        "webhook_verify_token": f"clinic_bot_{datetime.now().strftime('%Y%m%d')}",
+                        "subscription_status": res.data.get("subscription_status") or "trial",
+                        "monthly_fee": res.data.get("monthly_fee") or 1500,
+                        "tier": res.data.get("tier") or "Essential",
+                        "created_date": datetime.now().strftime("%Y-%m-%d"),
+                        "expiry_date": f"{datetime.now().year}-12-31",
+                        "doctors": [],
+                        "sheet_name": f"{c_name.lower().replace(' ', '_')}_bookings",
+                        "medicines_sheet": f"{c_name.lower().replace(' ', '_')}_medicines",
+                        "whatsapp_token_env": f"WHATSAPP_TOKEN_{lookup_key}",
+                        "phone_number_id": lookup_key
+                    }
+                    config[lookup_key] = new_clinic
+                    save_config(config)
+                    logging.info(f"Auto-imported clinic '{c_name}' ({lookup_key}) on-demand from Supabase.")
+                    clinic = new_clinic
+        except Exception as e:
+            logging.debug(f"Failed to fetch and import single clinic from Supabase: {e}")
+
     if not clinic:
         logging.warning(f"Clinic lookup failed for ID: '{lookup_key}'")
         logging.info(f"Available keys in config: {list(config.keys())}")

@@ -257,3 +257,39 @@ def get_reminder_analytics(clinic_id):
     except Exception as e:
         logger.error(f"Supabase reminder analytics error: {e}")
         return {}
+
+def admin_create_clinic_user(email, password, clinic_id, full_name):
+    """
+    Admin-only helper to securely create a clinic user login in Supabase Auth
+    and link their profile. Bypasses RLS since it uses service_role key.
+    """
+    db = get_db()
+    if not db:
+        return None
+    try:
+        # 1. Create Auth User
+        user_res = db.auth.admin.create_user({
+            "email": email,
+            "password": password,
+            "email_confirm": True,
+            "user_metadata": {
+                "full_name": full_name
+            }
+        })
+        if not user_res or not user_res.user:
+            return None
+            
+        user_id = user_res.user.id
+        
+        # 2. Insert/Update Profile record linked to the clinic
+        db.table("profiles").upsert({
+            "id": user_id,
+            "clinic_id": clinic_id,
+            "role": "clinic",
+            "full_name": full_name
+        }).execute()
+        
+        return user_id
+    except Exception as e:
+        logger.error(f"Failed to securely create clinic user: {e}")
+        return None
