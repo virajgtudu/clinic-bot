@@ -353,33 +353,40 @@ def add_clinic(clinic_data):
 
 def update_clinic(phone_number_id, updates):
     """Update clinic details"""
-    config = load_config()
     phone_number_id = str(phone_number_id)
+    # Ensure clinic is loaded / imported from Supabase if missing from local config
+    get_clinic_by_phone_id(phone_number_id)
+    
+    config = load_config()
+    in_local = False
     if phone_number_id in config:
         config[phone_number_id].update(updates)
         config[phone_number_id]["phone_number_id"] = phone_number_id
         save_config(config)
+        in_local = True
         
-        # Sync to Supabase table if available
-        try:
-            from services.database import get_db
-            db = get_db()
-            if db:
-                db_updates = {}
-                if "name" in updates:
-                    db_updates["name"] = updates["name"]
-                if "tier" in updates:
-                    db_updates["tier"] = updates["tier"]
-                if "branding_json" in updates:
-                    db_updates["branding_json"] = updates["branding_json"]
-                
-                if db_updates:
-                    db.table("clinics").update(db_updates).eq("id", phone_number_id).execute()
-        except Exception as e:
-            logging.error(f"Failed to sync clinic updates to Supabase: {e}")
+    # Sync to Supabase table if available
+    db_updated = False
+    try:
+        from services.database import get_db
+        db = get_db()
+        if db:
+            db_updates = {}
+            if "name" in updates:
+                db_updates["name"] = updates["name"]
+            if "tier" in updates:
+                db_updates["tier"] = updates["tier"]
+            if "branding_json" in updates:
+                db_updates["branding_json"] = updates["branding_json"]
             
-        return True
-    return False
+            if db_updates:
+                res = db.table("clinics").update(db_updates).eq("id", phone_number_id).execute()
+                if res.data is not None:
+                    db_updated = True
+    except Exception as e:
+        logging.error(f"Failed to sync clinic updates to Supabase: {e}")
+        
+    return in_local or db_updated
 
 def delete_clinic(phone_number_id):
     """Remove a clinic"""

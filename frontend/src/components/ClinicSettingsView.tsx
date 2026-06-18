@@ -37,7 +37,7 @@ const fileToBase64 = (file: File): Promise<string> => {
 };
 
 export function ClinicSettings({ onManageAvailability }: { onManageAvailability: () => void }) {
-  const { profile } = useAuth();
+  const { profile, session } = useAuth();
   
   // General State
   const [tier, setTier] = useState('Essential');
@@ -156,21 +156,32 @@ export function ClinicSettings({ onManageAvailability }: { onManageAvailability:
 
   // Upgrade Plan Helper
   const handleUpgrade = async () => {
-    if (!profile?.clinic_id) return;
+    if (!profile?.clinic_id || !session?.access_token) return;
     setIsUpgrading(true);
     try {
-      const { error } = await supabase
-        .from('clinics')
-        .update({ tier: 'Professional' })
-        .eq('id', profile.clinic_id);
+      const rawApiUrl = import.meta.env.VITE_API_URL || 
+        (window.location.hostname === 'localhost' ? 'http://localhost:5000' : 'https://' + window.location.host);
+      const apiUrl = rawApiUrl.endsWith('/') ? rawApiUrl.slice(0, -1) : rawApiUrl;
 
-      if (error) throw error;
+      const response = await fetch(`${apiUrl}/api/clinic/upgrade`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || 'Failed to upgrade. Please contact administrator.');
+      }
+
       setTier('Professional');
       alert('🎉 Congratulations! You have successfully upgraded to the Professional Package! Custom Branding features are now unlocked.');
       window.location.reload();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('Failed to upgrade. Please ensure the database has been migrated with the tier column.');
+      alert(`Failed to upgrade: ${err.message || 'Please contact support.'}`);
     } finally {
       setIsUpgrading(false);
     }
