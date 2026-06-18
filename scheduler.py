@@ -12,6 +12,29 @@ from services.whatsapp import send_text, send_buttons
 from services.database import get_db, get_all_clinics
 
 
+def format_custom_template(clinic, template_key, default_template, variables):
+    """
+    Format custom template if clinic tier is Professional.
+    variables: dict of key-value pairs to replace
+    """
+    tier = clinic.get("tier", "Essential")
+    branding = clinic.get("branding_json") or {}
+    
+    template = default_template
+    if tier == "Professional" and branding:
+        templates = branding.get("templates") or {}
+        custom_template = templates.get(template_key)
+        if custom_template and custom_template.strip():
+            template = custom_template.strip()
+            
+    # Replace variables (case-insensitive keys)
+    formatted = template
+    for key, val in variables.items():
+        placeholder = "{" + str(key) + "}"
+        formatted = formatted.replace(placeholder, str(val))
+    return formatted
+
+
 def get_active_tests(clinic):
     """Get all active test reminders for a clinic from Supabase"""
     db = get_db()
@@ -34,7 +57,7 @@ def get_active_tests(clinic):
         now = get_now()
         today_str = now.strftime("%Y-%m-%d")
         tomorrow_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
-
+ 
         active = []
         for r in response.data:
             start_date = r.get("start_date")
@@ -44,6 +67,7 @@ def get_active_tests(clinic):
                 active.append({
                     "id": r["id"],
                     "Phone": r["patient_phone"],
+                    "Patient Name": r.get("patient_name") or "Patient",
                     "Test Name": r["item_name"],
                     "Instructions": meta.get("instructions", "Follow prescribed precautions."),
                     "Date": datetime.strptime(start_date, "%Y-%m-%d").strftime("%d-%m-%Y"),
@@ -91,6 +115,12 @@ def send_test_reminders():
 
             print(f"      Checking test: {test_name} for {phone} on {test_date}")
 
+            patient_name = t.get("Patient Name", "Patient")
+            custom_tpl = None
+            if clinic.get("tier") == "Professional":
+                branding = clinic.get("branding_json") or {}
+                custom_tpl = (branding.get("templates") or {}).get("test")
+
             # Check for specific times first
             if reminder_times:
                 for reminder_time in reminder_times:
@@ -114,13 +144,25 @@ def send_test_reminders():
                                       (current_time.hour == reminder_hour and current_time.minute >= reminder_minute))
                         
                         if is_past_time and dose_id not in last_sent:
-                            msg = (
-                                f"🧪 *Test Reminder*\n\n"
-                                f"Hi, this is a reminder for your scheduled test today ({test_date}) at {t_clean}:\n\n"
-                                f"📋 Test: {test_name}\n"
-                                f"📝 Instructions: {instr}\n\n"
-                                f"Please follow the instructions carefully."
-                            )
+                            if custom_tpl and custom_tpl.strip():
+                                msg = format_custom_template(
+                                    clinic,
+                                    "test",
+                                    custom_tpl,
+                                    {
+                                        "patient_name": patient_name,
+                                        "test_name": test_name,
+                                        "instructions": instr
+                                    }
+                                )
+                            else:
+                                msg = (
+                                    f"🧪 *Test Reminder*\n\n"
+                                    f"Hi, this is a reminder for your scheduled test today ({test_date}) at {t_clean}:\n\n"
+                                    f"📋 Test: {test_name}\n"
+                                    f"📝 Instructions: {instr}\n\n"
+                                    f"Please follow the instructions carefully."
+                                )
                             type_sent = dose_id
                             break # Send one reminder per pulse
                     except Exception as te:
@@ -130,23 +172,47 @@ def send_test_reminders():
             if not msg:
                 if test_date == tomorrow_str and "tomorrow" not in last_sent.lower():
                     # 1 day before reminder
-                    msg = (
-                        f"🧪 *Test Reminder (Tomorrow)*\n\n"
-                        f"Hi, this is a reminder that you have a test scheduled for tomorrow ({test_date}):\n\n"
-                        f"📋 Test: {test_name}\n"
-                        f"📝 Instructions: {instr}\n\n"
-                        f"Please follow the instructions carefully."
-                    )
+                    if custom_tpl and custom_tpl.strip():
+                        msg = format_custom_template(
+                            clinic,
+                            "test",
+                            custom_tpl,
+                            {
+                                "patient_name": patient_name,
+                                "test_name": test_name,
+                                "instructions": instr
+                            }
+                        )
+                    else:
+                        msg = (
+                            f"🧪 *Test Reminder (Tomorrow)*\n\n"
+                            f"Hi, this is a reminder that you have a test scheduled for tomorrow ({test_date}):\n\n"
+                            f"📋 Test: {test_name}\n"
+                            f"📝 Instructions: {instr}\n\n"
+                            f"Please follow the instructions carefully."
+                        )
                     type_sent = "tomorrow"
                 elif test_date == today_str and current_hour < 11 and "today" not in last_sent.lower():
                     # Same day morning reminder
-                    msg = (
-                        f"🧪 *Test Reminder (Today)*\n\n"
-                        f"Hi, this is a reminder for your scheduled test today ({test_date}):\n\n"
-                        f"📋 Test: {test_name}\n"
-                        f"📝 Instructions: {instr}\n\n"
-                        f"Please follow the instructions carefully."
-                    )
+                    if custom_tpl and custom_tpl.strip():
+                        msg = format_custom_template(
+                            clinic,
+                            "test",
+                            custom_tpl,
+                            {
+                                "patient_name": patient_name,
+                                "test_name": test_name,
+                                "instructions": instr
+                            }
+                        )
+                    else:
+                        msg = (
+                            f"🧪 *Test Reminder (Today)*\n\n"
+                            f"Hi, this is a reminder for your scheduled test today ({test_date}):\n\n"
+                            f"📋 Test: {test_name}\n"
+                            f"📝 Instructions: {instr}\n\n"
+                            f"Please follow the instructions carefully."
+                        )
                     type_sent = "today"
 
             if msg and send_whatsapp(clinic, phone, msg):
@@ -225,6 +291,7 @@ def get_active_medicines(clinic):
                 active.append({
                     "id": r["id"],
                     "Phone": r["patient_phone"],
+                    "Patient Name": r.get("patient_name") or "Patient",
                     "Medicine": r["item_name"],
                     "Frequency": r["frequency"],
                     "Instructions": meta.get("instructions", ""),
@@ -343,16 +410,34 @@ def send_medicine_reminders():
                     print(f"   📱 Sending to {phone}: {medicine_name} (Scheduled: {reminder_time}, Current: {current_hour}:{current_minute:02d})")
                     print(f"      Dose ID: {dose_id}, Last Sent: {last_sent}")
                     
-                    tests_line = ""
-                    if "Tests:" in instructions:
-                        tests_line = "\n🧪 Tests:\n" + instructions.split("Tests:", 1)[1].strip()
+                    patient_name = med.get("Patient Name", "Patient")
+                    custom_tpl = None
+                    if clinic.get("tier") == "Professional":
+                        branding = clinic.get("branding_json") or {}
+                        custom_tpl = (branding.get("templates") or {}).get("medicine")
+                    
+                    if custom_tpl and custom_tpl.strip():
+                        msg = format_custom_template(
+                            clinic,
+                            "medicine",
+                            custom_tpl,
+                            {
+                                "patient_name": patient_name,
+                                "medicine_name": medicine_name,
+                                "dosage": instructions or reminder_time
+                            }
+                        )
+                    else:
+                        tests_line = ""
+                        if "Tests:" in instructions:
+                            tests_line = "\n🧪 Tests:\n" + instructions.split("Tests:", 1)[1].strip()
 
-                    msg = (
-                        f"💊 *Medicine Reminder*\n\n"
-                        f"Time to take your medicines ({reminder_time}):\n- " + "\n- ".join([m.strip() for m in medicine_name.split(",") if m.strip()]) + "\n\n"
-                        f"⏰ Time: {reminder_time}"
-                        f"{tests_line}"
-                    )
+                        msg = (
+                            f"💊 *Medicine Reminder*\n\n"
+                            f"Time to take your medicines ({reminder_time}):\n- " + "\n- ".join([m.strip() for m in medicine_name.split(",") if m.strip()]) + "\n\n"
+                            f"⏰ Time: {reminder_time}"
+                            f"{tests_line}"
+                        )
                     
                     buttons = [
                         {"id": "med_taken", "title": "Taken ✅"},
@@ -423,16 +508,33 @@ def send_appointment_reminders():
                     doctor = r.get('Doctor', '')
                     token = r.get('Token', '')
                     
-                    msg = (
-                        f"⏰ Appointment Reminder\n\n"
-                        f"Hi {name}, this is a reminder for your appointment tomorrow:\n\n"
-                        f"📅 Date: {tomorrow}\n"
-                        f"🕐 Time: {time_val}\n"
-                        f"👨‍⚕️ Doctor: {doctor}\n"
-                        f"🔖 Token: {token}\n\n"
-                        f"Please arrive 15 minutes early.\n"
-                        f"Reply CANCEL to cancel."
-                    )
+                    custom_tpl = None
+                    if clinic.get("tier") == "Professional":
+                        branding = clinic.get("branding_json") or {}
+                        custom_tpl = (branding.get("templates") or {}).get("appointment")
+                    
+                    if custom_tpl and custom_tpl.strip():
+                        msg = format_custom_template(
+                            clinic,
+                            "appointment",
+                            custom_tpl,
+                            {
+                                "patient_name": name,
+                                "doctor_name": doctor,
+                                "booking_time": f"{tomorrow} {time_val}"
+                            }
+                        )
+                    else:
+                        msg = (
+                            f"⏰ Appointment Reminder\n\n"
+                            f"Hi {name}, this is a reminder for your appointment tomorrow:\n\n"
+                            f"📅 Date: {tomorrow}\n"
+                            f"🕐 Time: {time_val}\n"
+                            f"👨‍⚕️ Doctor: {doctor}\n"
+                            f"🔖 Token: {token}\n\n"
+                            f"Please arrive 15 minutes early.\n"
+                            f"Reply CANCEL to cancel."
+                        )
                     
                     send_whatsapp(clinic, phone, msg)
                     print(f"Sent appointment reminder to {phone}")
@@ -540,20 +642,45 @@ def send_followup_reminders():
                 except Exception:
                     pass
 
-                new_msg = (
-                    f"🏥 *{clinic_name} Follow-up Reminder*\n\n"
-                    f"Hello *{name}*,\n\n"
-                    f"This is a friendly reminder that your follow-up consultation with *{doctor_name}* is due on *{display_date}*.\n\n"
-                    f"Regular follow-ups help your doctor monitor your progress and ensure your treatment is working effectively.\n\n"
-                    f"📅 Follow-up Date: {display_date}\n"
-                    f"👨⚕️ Doctor: {doctor_name}\n\n"
-                    f"To schedule your follow-up, reply with:\n\n"
-                    f"1️⃣ Book Follow-up Appointment\n"
-                    f"2️⃣ Cancel Follow-up\n\n"
-                    f"Need assistance? Simply reply to this message.\n\n"
-                    f"Thank you,\n"
-                    f"*{clinic_name}*"
-                )
+                custom_tpl = None
+                if clinic.get("tier") == "Professional":
+                    branding = clinic.get("branding_json") or {}
+                    custom_tpl = (branding.get("templates") or {}).get("followup")
+                
+                if custom_tpl and custom_tpl.strip():
+                    days_val = "7"
+                    try:
+                        due_dt = datetime.strptime(f_date, "%Y-%m-%d").date()
+                        days_diff = (due_dt - get_now().date()).days
+                        days_val = str(max(0, days_diff))
+                    except Exception:
+                        pass
+                    
+                    new_msg = format_custom_template(
+                        clinic,
+                        "followup",
+                        custom_tpl,
+                        {
+                            "patient_name": name,
+                            "doctor_name": doctor_name,
+                            "days": days_val
+                        }
+                    )
+                else:
+                    new_msg = (
+                        f"🏥 *{clinic_name} Follow-up Reminder*\n\n"
+                        f"Hello *{name}*,\n\n"
+                        f"This is a friendly reminder that your follow-up consultation with *{doctor_name}* is due on *{display_date}*.\n\n"
+                        f"Regular follow-ups help your doctor monitor your progress and ensure your treatment is working effectively.\n\n"
+                        f"📅 Follow-up Date: {display_date}\n"
+                        f"👨⚕️ Doctor: {doctor_name}\n\n"
+                        f"To schedule your follow-up, reply with:\n\n"
+                        f"1️⃣ Book Follow-up Appointment\n"
+                        f"2️⃣ Cancel Follow-up\n\n"
+                        f"Need assistance? Simply reply to this message.\n\n"
+                        f"Thank you,\n"
+                        f"*{clinic_name}*"
+                    )
 
                 msg = None
                 type_sent = ""

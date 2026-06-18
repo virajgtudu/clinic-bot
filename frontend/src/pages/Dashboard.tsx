@@ -18,7 +18,8 @@ import {
   LogOut,
   Loader2,
   Menu,
-  X
+  X,
+  Tv
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../lib/utils';
@@ -57,6 +58,7 @@ export default function Dashboard() {
   const [isDoctorSelectOpen, setIsDoctorSelectOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [branding, setBranding] = useState<any>(null);
+  const [isTvModeOpen, setIsTvModeOpen] = useState(false);
 
   React.useEffect(() => {
     const loadBranding = async () => {
@@ -248,6 +250,173 @@ export default function Dashboard() {
     return <SuperAdminView />;
   }
 
+  const renderTvQueueBoard = () => {
+    // Current time clock
+    const [currentTime, setCurrentTime] = React.useState(new Date());
+    React.useEffect(() => {
+      const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+      return () => clearInterval(timer);
+    }, []);
+
+    const servingPatient = queue.find(p => p.status === 'serving');
+    const nextPatients = queue.filter(p => p.status === 'waiting' || p.status === 'emergency').slice(0, 4);
+
+    const servingDoctor = doctors.find(d => d.id === servingPatient?.doctor_id);
+    const docPhoto = (branding?.queue_board?.show_doctor_photo !== false) ? (servingDoctor?.availability_json?.photo_url || '') : '';
+    const showAddress = branding?.queue_board?.show_address !== false;
+    const showLogo = branding?.queue_board?.show_logo !== false;
+    const showTime = branding?.queue_board?.show_time !== false;
+    const marqueeText = branding?.marquee_text || '';
+
+    return (
+      <div className="fixed inset-0 z-50 bg-[#020617] text-white flex flex-col justify-between p-8 font-sans overflow-hidden select-none">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-slate-800 pb-6 shrink-0">
+          <div className="flex items-center gap-4">
+            {showLogo && branding?.logo_url ? (
+              <img src={branding.logo_url} alt="Logo" className="w-16 h-16 object-contain rounded-2xl bg-white p-1" />
+            ) : (
+              <div className="w-16 h-16 bg-gradient-to-br from-brand-500 to-brand-600 rounded-2xl flex items-center justify-center text-white shadow-lg">
+                <Stethoscope size={36} strokeWidth={2.5} />
+              </div>
+            )}
+            <div>
+              <h1 className="text-3xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
+                {branding ? profile?.full_name || 'Clinic' : 'ClinicPRO Queue Display'}
+              </h1>
+              <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-0.5">Live Waiting Room Queue Board</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-6">
+            {showTime && (
+              <div className="text-right">
+                <p className="text-3xl font-black font-mono tracking-wider">{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</p>
+                <p className="text-[10px] text-brand-400 font-black uppercase tracking-widest mt-0.5">{currentTime.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })}</p>
+              </div>
+            )}
+            <button 
+              onClick={() => setIsTvModeOpen(false)} 
+              className="px-5 py-3 bg-slate-800 hover:bg-rose-600 rounded-xl transition-all font-black text-xs uppercase tracking-wider active:scale-95 border border-slate-700"
+            >
+              Exit TV View
+            </button>
+          </div>
+        </div>
+
+        {/* Main Content Layout */}
+        <div className="flex-1 my-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch overflow-hidden">
+          {/* NOW SERVING Column */}
+          <div className="lg:col-span-7 bg-slate-900/40 border border-slate-800/80 rounded-[3rem] p-10 flex flex-col justify-between relative overflow-hidden shadow-2xl">
+            <div className="absolute top-0 right-0 p-12 opacity-5">
+              <Activity size={240} className="text-brand-500" />
+            </div>
+            
+            <div className="flex items-center gap-3 text-rose-500">
+              <div className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
+              <span className="text-[10px] font-black uppercase tracking-[0.25em]">Now Serving Patient</span>
+            </div>
+
+            {servingPatient ? (
+              <div className="space-y-6 my-auto">
+                <h2 className="text-8xl font-black font-mono tracking-tight text-brand-400 animate-pulse">
+                  {getFormattedToken(servingPatient.doctor_id, servingPatient.token)}
+                </h2>
+                <div className="space-y-1">
+                  <p className="text-4xl font-black tracking-tight">{servingPatient.name}</p>
+                  <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Token #{servingPatient.token}</p>
+                </div>
+                
+                {servingDoctor && (
+                  <div className="flex items-center gap-4 bg-slate-950/40 p-5 rounded-2xl border border-slate-850/50 w-fit">
+                    <div className="w-14 h-14 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center overflow-hidden shrink-0">
+                      {docPhoto ? (
+                        <img src={docPhoto} alt="Doctor avatar" className="w-full h-full object-cover" />
+                      ) : (
+                        <Stethoscope size={24} className="text-slate-550" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-bold text-sm text-slate-200">{servingDoctor.name}</p>
+                      <p className="text-[10px] text-brand-400 font-black uppercase tracking-widest">{servingDoctor.specialty || 'General Practitioner'}</p>
+                      {servingDoctor.availability_json?.registration_number && (
+                        <p className="text-[8px] text-slate-500 mt-0.5">Reg: {servingDoctor.availability_json.registration_number}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="my-auto text-center py-12">
+                <p className="text-5xl font-black text-slate-700">---</p>
+                <p className="text-sm font-bold text-slate-500 mt-2 uppercase tracking-widest">Waiting for next patient</p>
+              </div>
+            )}
+            
+            <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Please approach the reception when your token is active.</div>
+          </div>
+
+          {/* NEXT IN LINE Column */}
+          <div className="lg:col-span-5 bg-slate-900/20 border border-slate-800/50 rounded-[3rem] p-10 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center gap-2 text-slate-400 mb-6">
+                <Clock size={16} />
+                <span className="text-[10px] font-black uppercase tracking-[0.25em]">Next Patients (Queue)</span>
+              </div>
+              
+              <div className="space-y-4">
+                {nextPatients.length > 0 ? (
+                  nextPatients.map((patient, idx) => (
+                    <div key={patient.id} className="flex items-center justify-between p-5 bg-slate-900/80 rounded-2xl border border-slate-800/40 hover:scale-[1.01] transition-transform">
+                      <div className="flex items-center gap-4">
+                        <span className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-sm text-slate-300">
+                          {idx + 1}
+                        </span>
+                        <div>
+                          <p className="font-bold text-sm text-slate-200">{patient.name}</p>
+                          <p className="text-[9px] text-slate-550 font-bold uppercase tracking-wider mt-0.5">Status: {patient.status}</p>
+                        </div>
+                      </div>
+                      <span className="text-lg font-black font-mono text-slate-400">
+                        {getFormattedToken(patient.doctor_id, patient.token)}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-16 text-slate-600 font-bold text-sm">
+                    No upcoming patients waiting in queue
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider flex items-center justify-between">
+              <span>Queue Status: Active</span>
+              <span>Total Waiting: {queue.filter(p => p.status === 'waiting' || p.status === 'emergency').length}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="shrink-0 space-y-4">
+          {showAddress && (branding?.clinic_address || profile?.address) && (
+            <p className="text-center text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+              📍 {branding?.clinic_address || profile?.address}
+            </p>
+          )}
+          
+          <div className="bg-slate-900 text-brand-500 py-3.5 px-6 rounded-2xl overflow-hidden relative shadow-lg border border-slate-800/80">
+            <div className="animate-marquee whitespace-nowrap font-black text-xs uppercase tracking-[0.2em]">
+              📢 {marqueeText || 'Welcome to ClinicPRO Queue Management. Enjoy real-time updates of patient schedules and appointment times.'}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  if (isTvModeOpen) {
+    return renderTvQueueBoard();
+  }
 
   if (!loading && !profile?.clinic_id) {
     return <SetupClinic />;
@@ -404,6 +573,7 @@ export default function Dashboard() {
                    <div className="flex flex-col gap-3">
                      <ActionButton onClick={() => setIsModalOpen(true)} icon={<UserPlus size={18} />} label="Add Walk-in" primary />
                      <ActionButton onClick={handleNextPatientClick} icon={<FastForward size={18} />} label="Next Patient" />
+                     <ActionButton onClick={() => setIsTvModeOpen(true)} icon={<Tv size={18} />} label="Launch TV Display" />
                    </div>
                 </div>
               </div>

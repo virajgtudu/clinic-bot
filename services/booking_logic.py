@@ -408,10 +408,19 @@ def _extract_text(message):
 
 
 def _show_main_menu(clinic, phone):
+    tier = clinic.get("tier", "Essential")
+    branding = clinic.get("branding_json") or {}
+    
+    msg = f"Welcome to {_clinic_name(clinic)}.\n\nHow can I help you today?"
+    if tier == "Professional" and branding:
+        custom_msg = branding.get("welcome_message")
+        if custom_msg and custom_msg.strip():
+            msg = custom_msg.strip()
+
     send_buttons(
         clinic,
         phone,
-        f"Welcome to {_clinic_name(clinic)}.\n\nHow can I help you today?",
+        msg,
         [
             {"id": "book", "title": "Book"},
             {"id": "reminders", "title": "My Reminders"},
@@ -1329,6 +1338,63 @@ def handle_message(clinic, message):
             send_text(clinic, phone, "To book your follow-up appointment, please reply with *1*.\nTo cancel it, please reply with *2*.")
             return
     
+    # Welcome menu shortcuts when user is in main menu
+    if step in {"main_menu", "main"}:
+        is_book = (
+            text in {"1", "book", "new"} or 
+            text.startswith("1") or 
+            "book" in text or 
+            "new appointment" in text
+        )
+        is_queue = (
+            text in {"2", "status"} or 
+            text.startswith("2") or 
+            "queue" in text or 
+            "status" in text
+        )
+        is_contact = (
+            text in {"3", "help", "contact"} or 
+            text.startswith("3") or 
+            "contact" in text or 
+            "clinic" in text or 
+            "address" in text or 
+            "phone" in text
+        )
+        
+        if is_book:
+            doctors = get_doctors(clinic_id) or clinic.get("doctors", [])
+            if not doctors:
+                send_text(clinic, phone, "No doctors are configured yet. Please contact the clinic.")
+                return
+            user_sessions[key] = {
+                "step": "select_doctor",
+                "clinic_id": clinic_id,
+                "phone": phone,
+                "doctors": doctors,
+            }
+            _show_doctors(clinic, phone, doctors)
+            return
+            
+        elif is_queue:
+            status_msg = _get_queue_status_info(clinic, phone)
+            send_text(clinic, phone, status_msg)
+            return
+            
+        elif is_contact:
+            c_name = _clinic_name(clinic)
+            c_phone = clinic.get("phone") or clinic.get("clinic_phone") or "N/A"
+            c_address = clinic.get("address") or clinic.get("clinic_address") or "N/A"
+            c_website = clinic.get("clinic_website") or clinic.get("website") or ""
+            
+            info = f"🏥 *{c_name}*\n\n"
+            info += f"📞 *Phone:* {c_phone}\n"
+            info += f"📍 *Address:* {c_address}\n"
+            if c_website:
+                info += f"🌐 *Website:* {c_website}\n"
+            
+            send_text(clinic, phone, info)
+            return
+
     if text == "status":
         status_msg = _get_queue_status_info(clinic, phone)
         send_text(clinic, phone, status_msg)
