@@ -217,10 +217,9 @@ export default function LandingPage() {
             <h2 className="text-5xl font-black mb-6 tracking-tight dark:text-white leading-tight">Scale your practice with ClinicPRO.</h2>
             <p className="text-lg text-slate-500 dark:text-slate-400 font-medium">Simple, transparent pricing that grows with you.</p>
           </div>
-          <div className="grid md:grid-cols-3 gap-10 max-w-6xl mx-auto items-center">
+          <div className="grid md:grid-cols-2 gap-10 max-w-4xl mx-auto items-center">
             <PricingCard tier="Essential" price="$49" features={['WhatsApp Booking', 'Live Queue Board', 'Basic Analytics', 'Email Support']} />
             <PricingCard tier="Professional" price="$99" features={['Everything in Essential', 'Medication Reminders', 'Full Compliance API', 'Priority Support', 'Custom Branding']} highlighted />
-            <PricingCard tier="Enterprise" price="Custom" features={['Everything in Professional', 'Multi-branch Support', 'EMR/EHR Integrations', 'Dedicated Manager', 'On-site Setup']} />
           </div>
         </div>
       </section>
