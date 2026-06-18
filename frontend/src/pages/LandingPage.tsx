@@ -32,7 +32,17 @@ export default function LandingPage() {
       {/* Navigation */}
       <nav className="fixed top-0 w-full z-50 bg-white/60 dark:bg-[#020617]/60 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50">
         <div className="max-w-7xl mx-auto px-8 h-20 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2 group">
+          <Link 
+            to="/" 
+            className="flex items-center gap-2 group"
+            onClick={(e) => {
+              if (e.detail === 3) {
+                e.preventDefault();
+                const dashboardUrl = import.meta.env.VITE_DASHBOARD_URL || 'http://localhost:8501';
+                window.open(dashboardUrl, '_blank');
+              }
+            }}
+          >
             <div className="w-10 h-10 bg-gradient-to-br from-brand-500 to-brand-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-brand-500/20 group-hover:scale-110 transition-transform">
               <Stethoscope size={22} strokeWidth={2.5} />
             </div>
@@ -263,9 +273,18 @@ export default function LandingPage() {
           </div>
           <div className="pt-10 border-t border-slate-100 dark:border-slate-900 flex flex-col md:row items-center justify-between gap-6 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
             <p>© 2026 ClinicPRO Technologies. All rights reserved.</p>
-            <div className="flex gap-8">
+            <div className="flex gap-8 items-center">
               <span>System Status: <span className="text-emerald-500">Normal</span></span>
               <span>Uptime: 99.9%</span>
+              <a 
+                href={import.meta.env.VITE_DASHBOARD_URL || 'http://localhost:8501'} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="opacity-20 hover:opacity-100 transition-opacity text-slate-500 dark:text-slate-400 cursor-pointer text-xs ml-1"
+                title="System Admin Portal"
+              >
+                🔑
+              </a>
             </div>
           </div>
         </div>
