@@ -11,10 +11,12 @@ import {
   Calendar,
   Phone,
   MapPin,
-  ShieldAlert
+  ShieldAlert,
+  Mail
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from './AuthContext';
+import { ThemeToggle } from './ThemeToggle';
 
 interface Clinic {
   id: string;
@@ -27,6 +29,7 @@ interface Clinic {
   tier?: string;
   created_date?: string;
   expiry_date?: string;
+  emails?: string[];
 }
 
 interface Stats {
@@ -252,12 +255,15 @@ export function SuperAdminView() {
             </div>
           </div>
           
-          <button 
-            onClick={signOut}
-            className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-black uppercase tracking-widest rounded-xl transition-all active:scale-95"
-          >
-            Log Out
-          </button>
+          <div className="flex items-center gap-4">
+            <ThemeToggle />
+            <button 
+              onClick={signOut}
+              className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-black uppercase tracking-widest rounded-xl transition-all active:scale-95"
+            >
+              Log Out
+            </button>
+          </div>
         </div>
       </nav>
 
@@ -517,6 +523,11 @@ export function SuperAdminView() {
                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
                           <Building2 size={12} /> ID: {clinic.phone_number_id || clinic.id}
                         </p>
+                        {clinic.emails && clinic.emails.length > 0 && (
+                          <p className="text-[10px] text-brand-500 dark:text-brand-400 font-bold uppercase tracking-wider flex items-center gap-1.5 mt-1" title="Associated Admin User Email">
+                            <Mail size={12} /> {clinic.emails.join(', ')}
+                          </p>
+                        )}
                       </div>
 
                       {/* Contact metadata info */}

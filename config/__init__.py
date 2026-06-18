@@ -129,16 +129,32 @@ def get_all_clinics():
     """Get list of all clinics, merging with Supabase table data if available"""
     config = load_config()
     supabase_clinics = {}
+    supabase_emails = {}
     try:
         from services.database import get_db
         db = get_db()
         if db:
+            # 1. Fetch clinics
             res = db.table("clinics").select("*").execute()
             if res.data:
                 for row in res.data:
                     supabase_clinics[str(row["id"])] = row
+
+            # 2. Fetch profiles and map user emails
+            profiles_res = db.table("profiles").select("id, clinic_id").execute()
+            if profiles_res.data:
+                auth_users = db.auth.admin.list_users()
+                user_emails = {u.id: u.email for u in auth_users}
+                for prof in profiles_res.data:
+                    c_id = str(prof.get("clinic_id"))
+                    p_id = prof.get("id")
+                    email = user_emails.get(p_id)
+                    if email and c_id:
+                        if c_id not in supabase_emails:
+                            supabase_emails[c_id] = []
+                        supabase_emails[c_id].append(email)
     except Exception as e:
-        logging.debug(f"Failed to fetch clinics from Supabase: {e}")
+        logging.debug(f"Failed to fetch clinics or profiles from Supabase: {e}")
 
     # Synchronize: If a clinic is in Supabase but not in config, add it!
     config_changed = False
@@ -184,6 +200,8 @@ def get_all_clinics():
         else:
             item.setdefault("tier", "Essential")
             
+        # Add associated admin emails
+        item["emails"] = supabase_emails.get(phone_id_str, [])
         clinics.append(item)
     return clinics
 
