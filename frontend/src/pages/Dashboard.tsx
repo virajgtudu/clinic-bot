@@ -80,24 +80,52 @@ export default function Dashboard() {
   }, [profile?.clinic_id]);
 
   React.useEffect(() => {
-    if (branding?.primary_color) {
-      const hexToRgbStr = (hex: string) => {
-        let c = hex.substring(1);
+    const applyBrandPalette = (primaryHex: string) => {
+      if (!primaryHex) return;
+      const hexToRgb = (hex: string) => {
+        let c = hex.replace('#', '').trim();
         if (c.length === 3) c = c[0] + c[0] + c[1] + c[1] + c[2] + c[2];
         const r = parseInt(c.substring(0, 2), 16);
         const g = parseInt(c.substring(2, 4), 16);
         const b = parseInt(c.substring(4, 6), 16);
+        return { r, g, b };
+      };
+      const mix = (c1: { r: number; g: number; b: number }, c2: { r: number; g: number; b: number }, weight: number) => {
+        const p = weight / 100;
+        const r = Math.round(c1.r * p + c2.r * (1 - p));
+        const g = Math.round(c1.g * p + c2.g * (1 - p));
+        const b = Math.round(c1.b * p + c2.b * (1 - p));
         return `${r} ${g} ${b}`;
       };
-      
       try {
-        const rgbStr = hexToRgbStr(branding.primary_color);
-        document.documentElement.style.setProperty('--brand-500', rgbStr);
+        const base = hexToRgb(primaryHex);
+        const white = { r: 255, g: 255, b: 255 };
+        const black = { r: 0, g: 0, b: 0 };
+        const shades = {
+          '--brand-50': mix(base, white, 5),
+          '--brand-100': mix(base, white, 10),
+          '--brand-200': mix(base, white, 30),
+          '--brand-300': mix(base, white, 50),
+          '--brand-400': mix(base, white, 70),
+          '--brand-500': `${base.r} ${base.g} ${base.b}`,
+          '--brand-600': mix(base, black, 85),
+          '--brand-700': mix(base, black, 70),
+          '--brand-800': mix(base, black, 55),
+          '--brand-900': mix(base, black, 40),
+          '--brand-950': mix(base, black, 25),
+        };
+        Object.entries(shades).forEach(([key, val]) => {
+          document.documentElement.style.setProperty(key, val);
+        });
       } catch (e) {
-        console.error('Failed to parse primary color:', e);
+        console.error('Failed to generate brand palette:', e);
       }
+    };
+
+    if (branding?.primary_color) {
+      applyBrandPalette(branding.primary_color);
     } else {
-      document.documentElement.style.setProperty('--brand-500', '14 165 233');
+      applyBrandPalette('#0ea5e9');
     }
   }, [branding]);
 

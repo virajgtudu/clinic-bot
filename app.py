@@ -201,40 +201,6 @@ def create_app():
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 
-    @flask_app.post("/api/clinic/upgrade")
-    def clinic_upgrade_route():
-        auth_header = request.headers.get("Authorization")
-        if not auth_header or not auth_header.startswith("Bearer "):
-            return jsonify({"error": "Unauthorized"}), 401
-            
-        token = auth_header.split(" ")[1]
-        try:
-            from services.database import get_db
-            from config import update_clinic
-            db = get_db()
-            if not db:
-                return jsonify({"error": "Supabase client not initialized"}), 500
-                
-            user = db.auth.get_user(token)
-            if not user or not user.user:
-                return jsonify({"error": "Unauthorized"}), 401
-                
-            user_id = user.user.id
-            profile_res = db.table("profiles").select("*").eq("id", user_id).limit(1).execute()
-            if not profile_res or not profile_res.data or len(profile_res.data) == 0:
-                return jsonify({"error": "Forbidden - Profile not found"}), 403
-                
-            role = profile_res.data[0].get("role")
-            clinic_id = profile_res.data[0].get("clinic_id")
-            if role != "admin" or not clinic_id:
-                return jsonify({"error": "Forbidden - Only clinic admins can upgrade"}), 403
-                
-            success = update_clinic(clinic_id, {"tier": "Professional"})
-            if success:
-                return jsonify({"status": "success", "tier": "Professional"})
-            return jsonify({"error": "Failed to update clinic tier"}), 500
-        except Exception as e:
-            return jsonify({"error": str(e)}), 500
 
     # Initialize Scheduler
     scheduler = BackgroundScheduler()

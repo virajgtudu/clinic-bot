@@ -32,6 +32,17 @@ ClinicPRO is a professional, multi-tenant clinic management platform. It integra
 - **WhatsApp State Management:** Sending greetings (e.g., `"Hi"`, `"Hello"`, `"Start"`) resets the user's session step to `main_menu` and clears any active prompt states (like `followup_prompt`). Generic booking/cancellation keywords (e.g., `"book"`, `"cancel"`) only trigger follow-up booking/cancellation actions when the user is explicitly in the `followup_prompt` state, preventing them from hijacking standard booking requests.
 - **Data Access:** Always use `.get()` for dictionary keys (especially `phone_number_id` and `sheet_name`) to ensure resilience against differing clinic configurations.
 
+## Admin Upgrades & Dynamic Branding
+- **Clinic Upgrade Policy:**
+  - Package tier updates (switching between `Essential` and `Professional`) are exclusive to the Super Admin. Clinics cannot upgrade their plan tier themselves.
+  - The endpoint `/api/admin/update-clinic` (POST) is used by the Super Admin to update the clinic's tier, ensuring only authorized platform administrators can modify package plans.
+- **Dynamic CSS Shading Engine:**
+  - When the clinic is on the `"Professional"` tier, custom branding (logo and brand color) is unlocked.
+  - Toggling preset colors or choosing a custom hex value triggers an automatic JavaScript mix engine (`applyBrandPalette`).
+  - This engine converts the primary brand color to RGB values and generates 11 dynamic brand shades (`--brand-50` to `--brand-950`) stored as space-separated decimals (e.g., `14 165 233` for `#0ea5e9`).
+  - These custom variables override Tailwind CSS color definitions, allowing full support for opacity utility suffixes (e.g., `bg-brand-500/10`) dynamically at runtime.
+  - Unused features (e.g., "Queue Board TV Settings" and "Scale to Enterprise") have been removed from the Settings panel.
+
 ## Deployment (Render)
 - **Environment Variables:**
   - `SUPABASE_URL`: Your Supabase project URL.

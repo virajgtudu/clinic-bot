@@ -37,11 +37,10 @@ const fileToBase64 = (file: File): Promise<string> => {
 };
 
 export function ClinicSettings({ onManageAvailability }: { onManageAvailability: () => void }) {
-  const { profile, session } = useAuth();
+  const { profile } = useAuth();
   
   // General State
   const [tier, setTier] = useState('Essential');
-  const [isUpgrading, setIsUpgrading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   // 1. Clinic Info State
@@ -125,6 +124,50 @@ export function ClinicSettings({ onManageAvailability }: { onManageAvailability:
     fetchClinicData();
   }, [profile?.clinic_id]);
 
+  // Apply chosen brand color to document root for real-time preview
+  useEffect(() => {
+    if (primaryColor) {
+      const hexToRgb = (hex: string) => {
+        let c = hex.replace('#', '').trim();
+        if (c.length === 3) c = c[0] + c[0] + c[1] + c[1] + c[2] + c[2];
+        const r = parseInt(c.substring(0, 2), 16);
+        const g = parseInt(c.substring(2, 4), 16);
+        const b = parseInt(c.substring(4, 6), 16);
+        return { r, g, b };
+      };
+      const mix = (c1: { r: number; g: number; b: number }, c2: { r: number; g: number; b: number }, weight: number) => {
+        const p = weight / 100;
+        const r = Math.round(c1.r * p + c2.r * (1 - p));
+        const g = Math.round(c1.g * p + c2.g * (1 - p));
+        const b = Math.round(c1.b * p + c2.b * (1 - p));
+        return `${r} ${g} ${b}`;
+      };
+      try {
+        const base = hexToRgb(primaryColor);
+        const white = { r: 255, g: 255, b: 255 };
+        const black = { r: 0, g: 0, b: 0 };
+        const shades = {
+          '--brand-50': mix(base, white, 5),
+          '--brand-100': mix(base, white, 10),
+          '--brand-200': mix(base, white, 30),
+          '--brand-300': mix(base, white, 50),
+          '--brand-400': mix(base, white, 70),
+          '--brand-500': `${base.r} ${base.g} ${base.b}`,
+          '--brand-600': mix(base, black, 85),
+          '--brand-700': mix(base, black, 70),
+          '--brand-800': mix(base, black, 55),
+          '--brand-900': mix(base, black, 40),
+          '--brand-950': mix(base, black, 25),
+        };
+        Object.entries(shades).forEach(([key, val]) => {
+          document.documentElement.style.setProperty(key, val);
+        });
+      } catch (e) {
+        console.error('Failed to generate brand palette:', e);
+      }
+    }
+  }, [primaryColor]);
+
   // Handle Preset Theme selections
   const handleColorTypeChange = (type: 'blue' | 'green' | 'purple' | 'red' | 'custom') => {
     setColorType(type);
@@ -152,38 +195,7 @@ export function ClinicSettings({ onManageAvailability }: { onManageAvailability:
     }
   };
 
-  // Upgrade Plan Helper
-  const handleUpgrade = async () => {
-    if (!profile?.clinic_id || !session?.access_token) return;
-    setIsUpgrading(true);
-    try {
-      const rawApiUrl = import.meta.env.VITE_API_URL || 
-        (window.location.hostname === 'localhost' ? 'http://localhost:5000' : 'https://' + window.location.host);
-      const apiUrl = rawApiUrl.endsWith('/') ? rawApiUrl.slice(0, -1) : rawApiUrl;
 
-      const response = await fetch(`${apiUrl}/api/clinic/upgrade`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        }
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || 'Failed to upgrade. Please contact administrator.');
-      }
-
-      setTier('Professional');
-      alert('🎉 Congratulations! You have successfully upgraded to the Professional Package! Custom Branding features are now unlocked.');
-      window.location.reload();
-    } catch (err: any) {
-      console.error(err);
-      alert(`Failed to upgrade: ${err.message || 'Please contact support.'}`);
-    } finally {
-      setIsUpgrading(false);
-    }
-  };
 
   // Save Unified Configurations
   const handleSaveChanges = async (e: React.FormEvent) => {
@@ -427,8 +439,6 @@ export function ClinicSettings({ onManageAvailability }: { onManageAvailability:
                 <PremiumLockOverlay 
                   title="Unlock Custom Branding & Logo"
                   desc="Display your own custom clinic logo and choose colors that align with your medical brand identity."
-                  onUnlock={handleUpgrade}
-                  isUpgrading={isUpgrading}
                 />
               )}
               
@@ -503,8 +513,6 @@ export function ClinicSettings({ onManageAvailability }: { onManageAvailability:
                 <PremiumLockOverlay 
                   title="Custom Welcome Greetings"
                   desc="Customize the automated greeting chatbot message sent when new patients contact your WhatsApp line."
-                  onUnlock={handleUpgrade}
-                  isUpgrading={isUpgrading}
                 />
               )}
               
@@ -538,8 +546,6 @@ export function ClinicSettings({ onManageAvailability }: { onManageAvailability:
                 <PremiumLockOverlay 
                   title="Custom Reminder Wording"
                   desc="Edit the reminder copy and layout templates delivered to patients for medicine doses, tests, and follow-ups."
-                  onUnlock={handleUpgrade}
-                  isUpgrading={isUpgrading}
                 />
               )}
               
@@ -612,109 +618,6 @@ export function ClinicSettings({ onManageAvailability }: { onManageAvailability:
               </div>
             </div>
 
-            {/* Card 6: Queue Board Settings (Premium Locked) */}
-            <div className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-150 dark:border-slate-800 shadow-xl relative overflow-hidden min-h-[300px]">
-              {tier !== 'Professional' && (
-                <PremiumLockOverlay 
-                  title="Queue Board Customization"
-                  desc="Customize what elements display on the waiting room TV queue display: showing address, clock, photos or custom announcements."
-                  onUnlock={handleUpgrade}
-                  isUpgrading={isUpgrading}
-                />
-              )}
-              
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-2.5 bg-brand-50 dark:bg-brand-950/30 text-brand-500 rounded-xl">
-                  <Clock size={20} />
-                </div>
-                <div>
-                  <h3 className="text-lg font-black dark:text-white leading-tight">Queue Board TV Settings</h3>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Visual preferences and announcement feeds for waiting room TV</p>
-                </div>
-              </div>
-
-              <div className="space-y-6">
-                {/* Scrolling Marquee text announcement (Moved here) */}
-                <div className="space-y-1.5">
-                  <label htmlFor="marqueeText" className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 cursor-pointer">Waiting Room TV Marquee Announcement</label>
-                  <input 
-                    id="marqueeText"
-                    type="text" 
-                    value={marqueeText} 
-                    onChange={e => setMarqueeText(e.target.value)} 
-                    placeholder="e.g. HEALTH UPDATE: DEAR PATIENTS, WE NOW OFFER FREE DENTAL CHECK-UPS EVERY SUNDAY!"
-                    className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800/50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-brand-500/20 transition-all outline-none dark:text-white"
-                  />
-                  <p className="text-[9px] text-slate-455 font-bold uppercase tracking-wider ml-1">Displays as a marquee at the bottom of the TV screen.</p>
-                </div>
-
-                <hr className="border-slate-100 dark:border-slate-800" />
-                
-                {/* Show details checkboxes */}
-                <div className="space-y-3">
-                  <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">TV Board Branding Elements</span>
-                  
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <CheckboxOption 
-                      checked={qbShowLogo} 
-                      onChange={setQbShowLogo} 
-                      title="Show Clinic Logo" 
-                      description="Displays clinic logo in TV header" 
-                    />
-                    <CheckboxOption 
-                      checked={qbShowDoctorPhoto} 
-                      onChange={setQbShowDoctorPhoto} 
-                      title="Show Doctor Photo" 
-                      description="Shows doctor avatar in serving block" 
-                    />
-                    <CheckboxOption 
-                      checked={qbShowAddress} 
-                      onChange={setQbShowAddress} 
-                      title="Show Clinic Address" 
-                      description="Renders address as TV screen footer" 
-                    />
-                    <CheckboxOption 
-                      checked={qbShowTime} 
-                      onChange={setQbShowTime} 
-                      title="Show Current Time" 
-                      description="Displays live clock in TV header" 
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Card 7: Enterprise Advanced Settings (Always locked) */}
-            <div className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-150 dark:border-slate-800 shadow-xl relative overflow-hidden min-h-[300px]">
-              <EnterpriseLockOverlay 
-                title="Scale to Enterprise"
-                desc="Unlock Custom Domain bindings, Multi-Branch synchronization, Developer APIs, and full White Label solutions."
-              />
-              
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-2.5 bg-brand-50 dark:bg-brand-950/30 text-brand-500 rounded-xl">
-                  <Globe size={20} />
-                </div>
-                <div>
-                  <h3 className="text-lg font-black dark:text-white leading-tight">Enterprise Advanced settings</h3>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Scale solutions across corporate systems and custom domains</p>
-                </div>
-              </div>
-
-              <div className="space-y-4 opacity-50 select-none">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Custom Domain Name Binding</label>
-                  <input type="text" disabled placeholder="e.g. appointments.apolloclinic.com" className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold outline-none" />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <CheckboxOption checked={false} onChange={() => {}} title="White Label Application" description="Hide all ClinicPRO branding completely" />
-                  <CheckboxOption checked={false} onChange={() => {}} title="Multi-Branch Management" description="Sync multiple branches and databases" />
-                  <CheckboxOption checked={false} onChange={() => {}} title="Developer API Access" description="Access tokens and webhooks" />
-                  <CheckboxOption checked={false} onChange={() => {}} title="Dedicated Account Support" description="24/7 priority SLA support agent" />
-                </div>
-              </div>
-            </div>
 
             {/* Submit save button */}
             <button 
@@ -868,34 +771,10 @@ function ColorOption({ label, color, active, onClick, custom = false }: { label:
   );
 }
 
-// Sub-components: CheckboxOption
-function CheckboxOption({ checked, onChange, title, description }: { checked: boolean, onChange: (val: boolean) => void, title: string, description: string }) {
-  return (
-    <div 
-      onClick={() => onChange(!checked)}
-      className={cn(
-        "p-4 rounded-2xl border flex items-start gap-3.5 cursor-pointer select-none transition-all duration-300",
-        checked 
-          ? "border-brand-500 ring-2 ring-brand-500/10 bg-brand-500/5" 
-          : "border-slate-150 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-750 bg-white dark:bg-slate-900"
-      )}
-    >
-      <div className={cn(
-        "w-5 h-5 rounded-lg border flex items-center justify-center shrink-0 mt-0.5 transition-all",
-        checked ? "bg-brand-500 border-brand-500 text-white" : "border-slate-300 dark:border-slate-700 bg-transparent"
-      )}>
-        {checked && <span className="text-[10px] font-black font-sans">✓</span>}
-      </div>
-      <div>
-        <p className="text-xs font-black dark:text-white leading-tight">{title}</p>
-        <p className="text-[9px] text-slate-400 mt-1 font-bold leading-normal uppercase">{description}</p>
-      </div>
-    </div>
-  );
-}
+
 
 // Sub-components: PremiumLockOverlay
-function PremiumLockOverlay({ title, desc, onUnlock, isUpgrading }: { title: string, desc: string, onUnlock: () => void, isUpgrading: boolean }) {
+function PremiumLockOverlay({ title, desc }: { title: string, desc: string }) {
   return (
     <div className="absolute inset-0 bg-white/50 dark:bg-slate-950/70 backdrop-blur-md z-10 flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300">
       <div className="w-10 h-10 bg-gradient-to-br from-brand-500 to-indigo-500 rounded-xl flex items-center justify-center text-white mb-3 shadow-md">
@@ -908,42 +787,14 @@ function PremiumLockOverlay({ title, desc, onUnlock, isUpgrading }: { title: str
         {title}
       </h4>
       <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1.5 max-w-[260px] leading-relaxed mb-4">{desc}</p>
-      <button 
-        type="button"
-        onClick={onUnlock}
-        disabled={isUpgrading}
-        className="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-95 flex items-center gap-1.5"
-      >
-        {isUpgrading ? <Loader2 className="animate-spin" size={12} /> : 'Upgrade to Professional'}
-      </button>
+      <div className="px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider rounded-xl shadow-sm">
+        Contact Super Admin to Upgrade Plan
+      </div>
     </div>
   );
 }
 
-// Sub-components: EnterpriseLockOverlay
-function EnterpriseLockOverlay({ title, desc }: { title: string, desc: string }) {
-  return (
-    <div className="absolute inset-0 bg-white/50 dark:bg-slate-950/70 backdrop-blur-md z-10 flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300">
-      <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center text-white mb-3 shadow-md">
-        <Lock size={18} />
-      </div>
-      <span className="px-3 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 text-[8px] font-black rounded-full border border-amber-100 dark:border-amber-900/50 uppercase tracking-widest mb-1.5">
-        Enterprise Package
-      </span>
-      <h4 className="text-sm font-black dark:text-white tracking-tight leading-tight max-w-[240px]">
-        {title}
-      </h4>
-      <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1.5 max-w-[260px] leading-relaxed mb-4">{desc}</p>
-      <button 
-        type="button"
-        onClick={() => alert('Please contact our enterprise support team at sales@clinicpro.com to upgrade and configure Custom Domains, API Access, or Multi-Branch systems.')}
-        className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-95"
-      >
-        Contact Enterprise Support
-      </button>
-    </div>
-  );
-}
+
 
 // Sub-components: DoctorSettings
 function DoctorSettings({ tier }: { tier: string }) {
