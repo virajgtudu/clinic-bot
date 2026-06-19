@@ -25,6 +25,7 @@ import { useDoctors } from '../hooks/useDoctors';
 import type { Doctor } from '../hooks/useDoctors';
 import { supabase } from '../lib/supabase';
 import { cn } from '../lib/utils';
+import { ImageCropperModal } from './ImageCropperModal';
 
 // Helper to convert file to Base64
 const fileToBase64 = (file: File): Promise<string> => {
@@ -51,6 +52,7 @@ export function ClinicSettings({ onManageAvailability }: { onManageAvailability:
 
   // 2. Custom Branding State
   const [logoUrl, setLogoUrl] = useState(''); // Base64 data URL
+  const [tempLogoSrc, setTempLogoSrc] = useState('');
   const [colorType, setColorType] = useState<'blue' | 'green' | 'purple' | 'red' | 'custom'>('blue');
   const [primaryColor, setPrimaryColor] = useState('#0ea5e9');
   const [signature, setSignature] = useState('');
@@ -181,13 +183,13 @@ export function ClinicSettings({ onManageAvailability }: { onManageAvailability:
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 800000) {
-        alert('Image must be under 800KB. Please resize or compress the logo.');
+      if (file.size > 3000000) {
+        alert('Image must be under 3MB. Please select a smaller file.');
         return;
       }
       try {
         const base64 = await fileToBase64(file);
-        setLogoUrl(base64);
+        setTempLogoSrc(base64);
       } catch (err) {
         console.error('Failed to process image file:', err);
         alert('Failed to read logo image.');
@@ -740,7 +742,19 @@ export function ClinicSettings({ onManageAvailability }: { onManageAvailability:
 
       </div>
 
-      <DoctorSettings tier={tier} />
+      {tempLogoSrc && (
+        <ImageCropperModal
+          imageSrc={tempLogoSrc}
+          cropShape="rect"
+          onCrop={(cropped) => {
+            setLogoUrl(cropped);
+            setTempLogoSrc('');
+          }}
+          onClose={() => setTempLogoSrc('')}
+        />
+      )}
+
+      <DoctorSettings />
     </div>
   );
 }
@@ -797,7 +811,7 @@ function PremiumLockOverlay({ title, desc }: { title: string, desc: string }) {
 
 
 // Sub-components: DoctorSettings
-function DoctorSettings({ tier }: { tier: string }) {
+function DoctorSettings() {
   const { doctors, loading, addDoctor, updateDoctor, deleteDoctor } = useDoctors();
   const [isAdding, setIsAdding] = useState(false);
   const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null);
@@ -808,6 +822,7 @@ function DoctorSettings({ tier }: { tier: string }) {
   const [experience, setExperience] = useState('');
   const [regNumber, setRegNumber] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
+  const [tempPhotoSrc, setTempPhotoSrc] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -879,13 +894,13 @@ function DoctorSettings({ tier }: { tier: string }) {
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 200000) {
-        alert('Image must be under 200KB. Please compress the doctor photo.');
+      if (file.size > 3000000) {
+        alert('Image must be under 3MB. Please select a smaller file.');
         return;
       }
       try {
         const base64 = await fileToBase64(file);
-        setPhotoUrl(base64);
+        setTempPhotoSrc(base64);
       } catch (err) {
         console.error(err);
         alert('Failed to read image file.');
@@ -931,7 +946,7 @@ function DoctorSettings({ tier }: { tier: string }) {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
               
-              {/* Left Column: Photo Upload (Premium check visual warning/disabled if Essential) */}
+              {/* Left Column: Photo Upload */}
               <div className="space-y-3 flex flex-col items-center sm:items-start text-center sm:text-left relative">
                 <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Doctor Avatar</span>
                 
@@ -943,19 +958,11 @@ function DoctorSettings({ tier }: { tier: string }) {
                   )}
                 </div>
                 
-                <label className={cn(
-                  "inline-flex items-center gap-1.5 px-4 py-2 bg-white dark:bg-slate-850 hover:bg-slate-50 border border-slate-200 dark:border-slate-850 text-[10px] font-black uppercase tracking-wider rounded-xl cursor-pointer shadow-sm active:scale-95 transition-all",
-                  tier !== 'Professional' && "opacity-50 cursor-not-allowed pointer-events-none"
-                )}>
+                <label className="inline-flex items-center gap-1.5 px-4 py-2 bg-white dark:bg-slate-850 hover:bg-slate-50 border border-slate-200 dark:border-slate-850 text-[10px] font-black uppercase tracking-wider rounded-xl cursor-pointer shadow-sm active:scale-95 transition-all">
                   <Upload size={12} /> Select Photo
-                  <input type="file" accept="image/*" className="hidden" disabled={tier !== 'Professional'} onChange={handlePhotoUpload} />
+                  <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
                 </label>
-                {tier !== 'Professional' && (
-                  <span className="text-[8px] bg-amber-50 text-amber-600 dark:bg-amber-950/20 dark:text-amber-400 px-2 py-0.5 rounded-full font-black uppercase tracking-widest flex items-center gap-1">
-                    <Lock size={8} /> Pro Feature
-                  </span>
-                )}
-                {photoUrl && tier === 'Professional' && (
+                {photoUrl && (
                   <button type="button" onClick={() => setPhotoUrl('')} className="text-[9px] font-black text-rose-500 uppercase tracking-wider hover:underline">Remove Avatar</button>
                 )}
               </div>
@@ -976,17 +983,12 @@ function DoctorSettings({ tier }: { tier: string }) {
                 <div className="space-y-1.5 relative">
                   <label htmlFor="docSpecialty" className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 cursor-pointer flex items-center justify-between">
                     <span>Specialty</span>
-                    {tier !== 'Professional' && <span className="text-[8px] text-amber-500 font-bold uppercase tracking-widest flex items-center gap-0.5"><Lock size={8} /> Pro</span>}
                   </label>
                   <input 
                     id="docSpecialty"
                     type="text" value={specialty} onChange={e => setSpecialty(e.target.value)}
                     placeholder="Cardiologist, Dermatologist"
-                    disabled={tier !== 'Professional'}
-                    className={cn(
-                      "w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold transition-all outline-none dark:text-white focus:ring-2 focus:ring-brand-500/20",
-                      tier !== 'Professional' && "opacity-50 cursor-not-allowed"
-                    )}
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold transition-all outline-none dark:text-white focus:ring-2 focus:ring-brand-500/20"
                     spellCheck={false}
                   />
                 </div>
@@ -994,34 +996,24 @@ function DoctorSettings({ tier }: { tier: string }) {
                 <div className="space-y-1.5 relative">
                   <label htmlFor="docRegNumber" className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 cursor-pointer flex items-center justify-between">
                     <span>Medical Registration Number</span>
-                    {tier !== 'Professional' && <span className="text-[8px] text-amber-500 font-bold uppercase tracking-widest flex items-center gap-0.5"><Lock size={8} /> Pro</span>}
                   </label>
                   <input 
                     id="docRegNumber"
                     type="text" value={regNumber} onChange={e => setRegNumber(e.target.value)}
                     placeholder="e.g. MCI-12345"
-                    disabled={tier !== 'Professional'}
-                    className={cn(
-                      "w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold transition-all outline-none dark:text-white focus:ring-2 focus:ring-brand-500/20",
-                      tier !== 'Professional' && "opacity-50 cursor-not-allowed"
-                    )}
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold transition-all outline-none dark:text-white focus:ring-2 focus:ring-brand-500/20"
                   />
                 </div>
 
                 <div className="space-y-1.5 relative">
                   <label htmlFor="docQualifications" className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 cursor-pointer flex items-center justify-between">
                     <span>Qualifications & Degrees</span>
-                    {tier !== 'Professional' && <span className="text-[8px] text-amber-500 font-bold uppercase tracking-widest flex items-center gap-0.5"><Lock size={8} /> Pro</span>}
                   </label>
                   <input 
                     id="docQualifications"
                     type="text" value={qualifications} onChange={e => setQualifications(e.target.value)}
                     placeholder="MBBS, MD"
-                    disabled={tier !== 'Professional'}
-                    className={cn(
-                      "w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold transition-all outline-none dark:text-white focus:ring-2 focus:ring-brand-500/20",
-                      tier !== 'Professional' && "opacity-50 cursor-not-allowed"
-                    )}
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold transition-all outline-none dark:text-white focus:ring-2 focus:ring-brand-500/20"
                   />
                 </div>
               </div>
@@ -1066,11 +1058,10 @@ function DoctorSettings({ tier }: { tier: string }) {
         ) : (
           doctors.map(doc => {
             const meta = doc.availability_json || {};
-            // Hide Doctor Photo and other fields in display card if tier is not Professional
-            const docPhoto = tier === 'Professional' ? (meta.photo_url || '') : '';
-            const docRegNum = tier === 'Professional' ? (meta.registration_number || '') : '';
-            const docSpecialty = tier === 'Professional' ? (doc.specialty || 'General Practitioner') : 'General Practitioner';
-            const docQualifications = tier === 'Professional' ? (doc.qualifications || '') : '';
+            const docPhoto = meta.photo_url || '';
+            const docRegNum = meta.registration_number || '';
+            const docSpecialty = doc.specialty || 'General Practitioner';
+            const docQualifications = doc.qualifications || '';
 
             return (
               <div key={doc.id} className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-150 dark:border-slate-800 shadow-sm group hover:shadow-xl transition-all duration-500 flex flex-col justify-between">
@@ -1081,11 +1072,6 @@ function DoctorSettings({ tier }: { tier: string }) {
                         <img src={docPhoto} alt="Doctor avatar" className="w-full h-full object-cover" />
                       ) : (
                         <Stethoscope size={28} aria-hidden="true" />
-                      )}
-                      {tier !== 'Professional' && (
-                        <div className="absolute inset-0 bg-slate-100/50 dark:bg-slate-950/50 flex items-center justify-center text-slate-400">
-                          <Lock size={12} />
-                        </div>
                       )}
                     </div>
                     <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1124,6 +1110,18 @@ function DoctorSettings({ tier }: { tier: string }) {
           })
         )}
       </div>
+
+      {tempPhotoSrc && (
+        <ImageCropperModal
+          imageSrc={tempPhotoSrc}
+          cropShape="circle"
+          onCrop={(cropped) => {
+            setPhotoUrl(cropped);
+            setTempPhotoSrc('');
+          }}
+          onClose={() => setTempPhotoSrc('')}
+        />
+      )}
     </div>
   );
 }

@@ -17,11 +17,12 @@ ClinicPRO is a professional, multi-tenant clinic management platform. It integra
 
 ## Core Features
 - **Smart Queue:** Real-time patient flow monitoring with "Now Serving" updates and "Next Patient" automated status transitions. The "Next Patient" action conditionally prompts the administrator to select a doctor if multiple doctors exist (bypassing the selection if only one doctor is configured) and advances the queue by reverting the currently serving patient back to `Pending` status (which removes them from the active dashboard queue while keeping their status as `Pending` inside history and appointments) and serving the next waiting one.
-- **Doctor Management:** UI-driven management of doctors, specialties, and session timings/slots.
+- **Doctor Management:** UI-driven management of doctors, specialties, and session timings/slots. Doctor profile editing (including registration numbers, avatars, specialties, and qualifications) is fully available to clinics under both the Essential and Professional tiers.
 - **Initials-based Tokens:** Sequential tokens per doctor/date using first and last initials (e.g., `PJ-001` for Dr. Prabhat Jain).
 - **Automated Reminders:** Medication (interactive buttons), Test, and Follow-up reminders delivered via WhatsApp. Reminders are dual-synced between Supabase and Sheets.
 - **Manual Control:** Instant "Remind" functionality allows staff to bypass automated schedules for immediate patient notification. The React dashboard can trigger these WhatsApp messages securely through the backend API.
 - **Live Analytics:** Dynamic calculation of average wait times and peak traffic visualization.
+- **Interactive Image Cropper:** Premium, zero-dependency modal (`ImageCropperModal`) for cropping and applying logo uploads (rectangular 2.5:1 ratio) and doctor profile avatar uploads (circular 1:1 ratio). Powered by pointer events for multi-input drag and zoom, drawing crops directly to an HTML5 Canvas for premium 2x resolution base64 outputs.
 
 ## Conventions & Standards
 - **Patient Identification:** Identified by **Name + Mobile Number + Age**.
