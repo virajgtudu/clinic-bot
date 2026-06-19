@@ -1382,9 +1382,10 @@ def handle_message(clinic, message):
             
         elif is_contact:
             c_name = _clinic_name(clinic)
-            c_phone = clinic.get("phone") or clinic.get("clinic_phone") or "N/A"
-            c_address = clinic.get("address") or clinic.get("clinic_address") or "N/A"
-            c_website = clinic.get("clinic_website") or clinic.get("website") or ""
+            branding = clinic.get("branding_json") or {}
+            c_phone = branding.get("clinic_phone") or clinic.get("phone") or clinic.get("clinic_phone") or "N/A"
+            c_address = branding.get("clinic_address") or clinic.get("address") or clinic.get("clinic_address") or "N/A"
+            c_website = branding.get("clinic_website") or clinic.get("clinic_website") or clinic.get("website") or ""
             
             info = f"🏥 *{c_name}*\n\n"
             info += f"📞 *Phone:* {c_phone}\n"
@@ -1460,7 +1461,9 @@ def handle_message(clinic, message):
 
     if text in {"cancel", "reschedule"}:
         user_sessions[key] = {"step": "main_menu", "clinic_id": clinic_id, "phone": phone}
-        send_text(clinic, phone, f"Please contact {_clinic_name(clinic)} to cancel or reschedule: {clinic.get('phone', 'N/A')}")
+        branding = clinic.get("branding_json") or {}
+        cancel_phone = branding.get("clinic_phone") or clinic.get("phone") or "N/A"
+        send_text(clinic, phone, f"Please contact {_clinic_name(clinic)} to cancel or reschedule: {cancel_phone}")
         return
 
     if step == "select_doctor" and text.startswith("doc_"):
