@@ -64,32 +64,25 @@ export default function Dashboard() {
     const maxRetries = 5;
 
     const loadBranding = async () => {
-      if (!profile?.clinic_id) {
-        console.log('[Branding] No clinic_id in profile yet');
-        return;
-      }
+      if (!profile?.clinic_id) return;
       try {
-        console.log('[Branding] Fetching clinic branding for ID:', profile.clinic_id);
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from('clinics')
           .select('branding_json, tier')
           .eq('id', profile.clinic_id)
           .maybeSingle();
         
-        if (error) console.error('[Branding] Supabase fetch error:', error);
         if (!active) return;
 
         if (data) {
-          console.log('[Branding] Loaded clinic data:', data);
           if (data.tier && data.tier.toLowerCase() === 'professional' && data.branding_json) {
-            console.log('[Branding] Professional tier verified. Setting branding JSON:', data.branding_json);
             setBranding(data.branding_json);
           } else {
-            console.log('[Branding] Non-professional tier or missing branding JSON. Tier:', data.tier);
             setBranding(null);
           }
         } else {
-          console.log('[Branding] No clinic found with this ID');
+          // If no data is returned, it is likely due to the auth session not being fully sent in headers yet.
+          // Retry after a short delay.
           if (retries < maxRetries) {
             retries++;
             setTimeout(() => {
@@ -100,7 +93,7 @@ export default function Dashboard() {
           }
         }
       } catch (err) {
-        console.error('[Branding] Error in loadBranding:', err);
+        console.error('Error loading branding:', err);
         if (active) {
           if (retries < maxRetries) {
             retries++;
@@ -122,7 +115,6 @@ export default function Dashboard() {
 
   React.useEffect(() => {
     const applyBrandPalette = (primaryHex: string) => {
-      console.log('[Branding] applyBrandPalette called with hex:', primaryHex);
       if (!primaryHex) return;
       const hexToRgb = (hex: string) => {
         let c = hex.replace('#', '').trim();
@@ -156,7 +148,6 @@ export default function Dashboard() {
           '--brand-900': mix(base, black, 40),
           '--brand-950': mix(base, black, 25),
         };
-        console.log('[Branding] Injecting shades:', shades);
         
         let styleEl = document.getElementById('dynamic-brand-styles') as HTMLStyleElement;
         if (!styleEl) {
@@ -177,45 +168,8 @@ export default function Dashboard() {
             document.body.style.setProperty(key, val);
           }
         });
-        console.log('[Branding] Shades successfully written to DOM properties.');
-
-        setTimeout(() => {
-          try {
-            console.log('[Branding] --- CSS RULE INSPECTION ---');
-            const el = document.querySelector('.bg-brand-500');
-            if (el) {
-              console.log('[Branding] Active nav item computed background color:', getComputedStyle(el).backgroundColor);
-            } else {
-              console.log('[Branding] No active nav item element (.bg-brand-500) found in DOM.');
-            }
-
-            let foundRule = false;
-            for (let i = 0; i < document.styleSheets.length; i++) {
-              const sheet = document.styleSheets[i];
-              try {
-                const rules = sheet.cssRules || sheet.rules;
-                if (!rules) continue;
-                for (let j = 0; j < rules.length; j++) {
-                  const rule = rules[j] as CSSStyleRule;
-                  if (rule.selectorText && rule.selectorText.includes('.bg-brand-500')) {
-                    console.log(`[Branding] Found rule in stylesheet ${i}:`, rule.cssText);
-                    foundRule = true;
-                  }
-                }
-              } catch (e) {
-                // cross-origin stylesheets might throw error, skip them
-              }
-            }
-            if (!foundRule) {
-              console.log('[Branding] No .bg-brand-500 rule found in any stylesheet.');
-            }
-            console.log('[Branding] ---------------------------');
-          } catch (e) {
-            console.error('[Branding] Error inspecting styleSheets:', e);
-          }
-        }, 1000);
       } catch (e) {
-        console.error('[Branding] Failed to generate brand palette:', e);
+        console.error('Failed to generate brand palette:', e);
       }
     };
 
@@ -771,16 +725,6 @@ export default function Dashboard() {
           await callNext(doctorId);
         }}
       />
-
-      {/* Branding Diagnostics Overlay */}
-      <div className="fixed bottom-4 right-4 bg-slate-900/95 text-white p-4 rounded-2xl z-50 text-[10px] font-mono shadow-2xl border border-slate-800 pointer-events-auto flex flex-col gap-1">
-        <div className="font-bold text-amber-400 border-b border-slate-800 pb-1 mb-1">Branding Diagnostics</div>
-        <div>Clinic ID: <span className="text-slate-300">{profile?.clinic_id || 'null'}</span></div>
-        <div>Role: <span className="text-slate-300">{profile?.role || 'null'}</span></div>
-        <div>Branding Color: <span className="text-emerald-400 font-bold">{branding?.primary_color || 'null'}</span></div>
-        <div>Branding State: <span className="text-slate-300">{branding ? 'Loaded' : 'Null'}</span></div>
-        <div>DOM --brand-500: <span className="text-pink-400 font-bold">{typeof window !== 'undefined' ? getComputedStyle(document.documentElement).getPropertyValue('--brand-500').trim() : 'loading'}</span></div>
-      </div>
     </div>
   );
 }
