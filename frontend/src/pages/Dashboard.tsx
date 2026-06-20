@@ -137,7 +137,7 @@ export default function Dashboard() {
         const r = Math.round(c1.r * p + c2.r * (1 - p));
         const g = Math.round(c1.g * p + c2.g * (1 - p));
         const b = Math.round(c1.b * p + c2.b * (1 - p));
-        return `${r}, ${g}, ${b}`;
+        return `${r} ${g} ${b}`;
       };
       try {
         const base = hexToRgb(primaryHex);
@@ -149,7 +149,7 @@ export default function Dashboard() {
           '--brand-200': mix(base, white, 30),
           '--brand-300': mix(base, white, 50),
           '--brand-400': mix(base, white, 70),
-          '--brand-500': `${base.r}, ${base.g}, ${base.b}`,
+          '--brand-500': `${base.r} ${base.g} ${base.b}`,
           '--brand-600': mix(base, black, 85),
           '--brand-700': mix(base, black, 70),
           '--brand-800': mix(base, black, 55),
