@@ -65,24 +65,19 @@ export default function Dashboard() {
 
     const loadBranding = async () => {
       if (!profile?.clinic_id) return;
-      console.log(`loadBranding: profile?.clinic_id is ${profile.clinic_id}, attempt ${retries + 1}`);
       try {
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from('clinics')
           .select('branding_json, tier')
           .eq('id', profile.clinic_id)
           .maybeSingle();
         
-        console.log('loadBranding: Fetched data =', data, 'error =', error);
-        
         if (!active) return;
 
         if (data) {
           if (data.tier && data.tier.toLowerCase() === 'professional' && data.branding_json) {
-            console.log('loadBranding: Setting branding to', data.branding_json);
             setBranding(data.branding_json);
           } else {
-            console.log('loadBranding: Not professional tier or branding_json missing. Setting branding to null.');
             setBranding(null);
           }
         } else {
@@ -90,12 +85,10 @@ export default function Dashboard() {
           // Retry after a short delay.
           if (retries < maxRetries) {
             retries++;
-            console.log(`loadBranding: No data returned. Retrying in 500ms... (${retries}/${maxRetries})`);
             setTimeout(() => {
               if (active) loadBranding();
             }, 500);
           } else {
-            console.log('loadBranding: Max retries reached. Defaulting branding to null.');
             setBranding(null);
           }
         }
@@ -122,7 +115,6 @@ export default function Dashboard() {
 
   React.useEffect(() => {
     const applyBrandPalette = (primaryHex: string) => {
-      console.log('applyBrandPalette: called with', primaryHex);
       if (!primaryHex) return;
       const hexToRgb = (hex: string) => {
         let c = hex.replace('#', '').trim();
@@ -137,7 +129,7 @@ export default function Dashboard() {
         const r = Math.round(c1.r * p + c2.r * (1 - p));
         const g = Math.round(c1.g * p + c2.g * (1 - p));
         const b = Math.round(c1.b * p + c2.b * (1 - p));
-        return `${r} ${g} ${b}`;
+        return `${r}, ${g}, ${b}`;
       };
       try {
         const base = hexToRgb(primaryHex);
@@ -149,14 +141,13 @@ export default function Dashboard() {
           '--brand-200': mix(base, white, 30),
           '--brand-300': mix(base, white, 50),
           '--brand-400': mix(base, white, 70),
-          '--brand-500': `${base.r} ${base.g} ${base.b}`,
+          '--brand-500': `${base.r}, ${base.g}, ${base.b}`,
           '--brand-600': mix(base, black, 85),
           '--brand-700': mix(base, black, 70),
           '--brand-800': mix(base, black, 55),
           '--brand-900': mix(base, black, 40),
           '--brand-950': mix(base, black, 25),
         };
-        console.log('applyBrandPalette: Generated shades =', shades);
         
         let styleEl = document.getElementById('dynamic-brand-styles') as HTMLStyleElement;
         if (!styleEl) {
@@ -734,15 +725,6 @@ export default function Dashboard() {
           await callNext(doctorId);
         }}
       />
-      {/* Branding Diagnostics Overlay */}
-      <div className="fixed bottom-4 right-4 bg-slate-900/95 text-white p-4 rounded-2xl z-50 text-[10px] font-mono shadow-2xl border border-slate-800 pointer-events-auto flex flex-col gap-1">
-        <div className="font-bold text-amber-400 border-b border-slate-800 pb-1 mb-1">Branding Diagnostics</div>
-        <div>Clinic ID: <span className="text-slate-350">{profile?.clinic_id || 'null'}</span></div>
-        <div>Role: <span className="text-slate-350">{profile?.role || 'null'}</span></div>
-        <div>Branding Color: <span className="text-emerald-400 font-bold">{branding?.primary_color || 'null'}</span></div>
-        <div>Branding State: <span className="text-slate-350">{branding ? 'Loaded' : 'Null'}</span></div>
-        <div>DOM --brand-500: <span className="text-pink-400 font-bold">{typeof window !== 'undefined' ? getComputedStyle(document.documentElement).getPropertyValue('--brand-500').trim() : 'loading'}</span></div>
-      </div>
     </div>
   );
 }

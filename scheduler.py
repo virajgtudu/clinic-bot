@@ -11,6 +11,18 @@ from services.sheets import MEDICINE_HEADERS, TEST_HEADERS, ensure_headers, open
 from services.whatsapp import send_text, send_buttons
 from services.database import get_db, get_all_clinics
 
+# Safe print to prevent UnicodeEncodeError on Windows systems without UTF-8 console output.
+_original_print = print
+def print(*args, **kwargs):
+    encoding = sys.stdout.encoding or 'utf-8'
+    new_args = []
+    for arg in args:
+        if isinstance(arg, str):
+            new_args.append(arg.encode(encoding, errors='replace').decode(encoding))
+        else:
+            new_args.append(arg)
+    _original_print(*new_args, **kwargs)
+
 
 def format_custom_template(clinic, template_key, default_template, variables):
     """
