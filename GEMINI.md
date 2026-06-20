@@ -38,7 +38,7 @@ ClinicPRO is a professional, multi-tenant clinic management platform. It integra
   - Package tier updates (switching between `Essential` and `Professional`) are exclusive to the Super Admin. Clinics cannot upgrade their plan tier themselves.
   - The endpoint `/api/admin/update-clinic` (POST) is used by the Super Admin to update the clinic's tier, ensuring only authorized platform administrators can modify package plans.
 - **Dynamic CSS Shading Engine:**
-  - When the clinic is on the `"Professional"` tier, custom branding (logo and brand color) is unlocked.
+  - When the clinic is on the `"Professional"` tier (evaluated case-insensitively), custom branding (logo and brand color) is unlocked.
   - Toggling preset colors or choosing a custom hex value triggers an automatic JavaScript mix engine (`applyBrandPalette`).
   - This engine converts the primary brand color to RGB values and generates 11 dynamic brand shades (`--brand-50` to `--brand-950`) stored as space-separated decimals (e.g., `14 165 233` for `#0ea5e9`).
   - These custom variables override Tailwind CSS color definitions, allowing full support for opacity utility suffixes (e.g., `bg-brand-500/10`) dynamically at runtime.

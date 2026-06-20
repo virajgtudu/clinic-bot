@@ -201,6 +201,42 @@ def create_app():
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 
+    @flask_app.post("/api/admin/reset-password")
+    @admin_required
+    def admin_reset_password():
+        try:
+            data = request.json
+            if not data or "email" not in data or "new_password" not in data:
+                return jsonify({"error": "Missing email or new_password"}), 400
+                
+            email = data["email"]
+            new_password = data["new_password"]
+            
+            if len(new_password) < 6:
+                return jsonify({"error": "Password must be at least 6 characters long"}), 400
+                
+            from services.database import get_db
+            db = get_db()
+            if not db:
+                return jsonify({"error": "Supabase client not initialized"}), 500
+                
+            # Find the user by email
+            auth_users = db.auth.admin.list_users()
+            user_id = None
+            for u in auth_users:
+                if u.email.lower() == email.lower():
+                    user_id = u.id
+                    break
+                    
+            if not user_id:
+                return jsonify({"error": f"User with email '{email}' not found"}), 404
+                
+            # Reset password
+            db.auth.admin.update_user_by_id(user_id, {"password": new_password})
+            return jsonify({"status": "success", "message": f"Password reset successfully for {email}"})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
 
     # Initialize Scheduler
     scheduler = BackgroundScheduler()

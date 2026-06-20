@@ -74,6 +74,12 @@ export function ClinicSettings({ onManageAvailability }: { onManageAvailability:
   // Live Preview Tab State
   const [previewTab, setPreviewTab] = useState<'welcome' | 'appointment' | 'medicine' | 'followup' | 'test'>('welcome');
 
+  // 5. Change Password State
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordStatus, setPasswordStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [isPasswordUpdating, setIsPasswordUpdating] = useState(false);
+
   // Load Configurations
   useEffect(() => {
     const fetchClinicData = async () => {
@@ -110,7 +116,7 @@ export function ClinicSettings({ onManageAvailability }: { onManageAvailability:
             setQbShowAddress(b.queue_board?.show_address !== false);
             setQbShowTime(b.queue_board?.show_time !== false);
 
-            const color = b.primary_color || '#0ea5e9';
+            const color = (b.primary_color || '#0ea5e9').toLowerCase();
             setPrimaryColor(color);
             if (color === '#0ea5e9') setColorType('blue');
             else if (color === '#10b981') setColorType('green');
@@ -161,8 +167,25 @@ export function ClinicSettings({ onManageAvailability }: { onManageAvailability:
           '--brand-900': mix(base, black, 40),
           '--brand-950': mix(base, black, 25),
         };
+        
+        let styleEl = document.getElementById('dynamic-brand-styles') as HTMLStyleElement;
+        if (!styleEl) {
+          styleEl = document.createElement('style');
+          styleEl.id = 'dynamic-brand-styles';
+          document.head.appendChild(styleEl);
+        }
+        
+        const cssRules = `:root, body {
+          ${Object.entries(shades).map(([key, val]) => `${key}: ${val} !important;`).join('\n')}
+        }`;
+        styleEl.innerHTML = cssRules;
+
+        // Also set inline styles on html and body for absolute override
         Object.entries(shades).forEach(([key, val]) => {
           document.documentElement.style.setProperty(key, val);
+          if (document.body) {
+            document.body.style.setProperty(key, val);
+          }
         });
       } catch (e) {
         console.error('Failed to generate brand palette:', e);
@@ -303,6 +326,35 @@ export function ClinicSettings({ onManageAvailability }: { onManageAvailability:
     return '';
   };
 
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordStatus(null);
+
+    if (newPassword.length < 6) {
+      setPasswordStatus({ type: 'error', message: 'Password must be at least 6 characters long.' });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordStatus({ type: 'error', message: 'Passwords do not match.' });
+      return;
+    }
+
+    setIsPasswordUpdating(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      
+      setPasswordStatus({ type: 'success', message: 'Password updated successfully!' });
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      setPasswordStatus({ type: 'error', message: err.message || 'Failed to update password.' });
+    } finally {
+      setIsPasswordUpdating(false);
+    }
+  };
+
   return (
     <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-6xl pb-20">
       
@@ -313,7 +365,7 @@ export function ClinicSettings({ onManageAvailability }: { onManageAvailability:
             <h2 className="text-3xl font-black dark:text-white tracking-tight">Clinic Branding & Settings</h2>
             <span className={cn(
               "px-3 py-1 text-[10px] font-black uppercase tracking-wider rounded-full",
-              tier === 'Professional' 
+              tier?.toLowerCase() === 'professional' 
                 ? "bg-gradient-to-r from-brand-500 to-indigo-500 text-white shadow-md shadow-brand-500/10" 
                 : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
             )}>
@@ -437,7 +489,7 @@ export function ClinicSettings({ onManageAvailability }: { onManageAvailability:
 
             {/* Card 3: Custom Branding & Theme (Premium Locked) */}
             <div className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-150 dark:border-slate-800 shadow-xl relative overflow-hidden min-h-[300px]">
-              {tier !== 'Professional' && (
+              {tier?.toLowerCase() !== 'professional' && (
                 <PremiumLockOverlay 
                   title="Unlock Custom Branding & Logo"
                   desc="Display your own custom clinic logo and choose colors that align with your medical brand identity."
@@ -511,7 +563,7 @@ export function ClinicSettings({ onManageAvailability }: { onManageAvailability:
 
             {/* Card 4: Custom Welcome Message (Premium Locked) */}
             <div className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-150 dark:border-slate-800 shadow-xl relative overflow-hidden min-h-[200px]">
-              {tier !== 'Professional' && (
+              {tier?.toLowerCase() !== 'professional' && (
                 <PremiumLockOverlay 
                   title="Custom Welcome Greetings"
                   desc="Customize the automated greeting chatbot message sent when new patients contact your WhatsApp line."
@@ -544,7 +596,7 @@ export function ClinicSettings({ onManageAvailability }: { onManageAvailability:
 
             {/* Card 5: Message Templates (Premium Locked) */}
             <div className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-150 dark:border-slate-800 shadow-xl relative overflow-hidden min-h-[400px]">
-              {tier !== 'Professional' && (
+              {tier?.toLowerCase() !== 'professional' && (
                 <PremiumLockOverlay 
                   title="Custom Reminder Wording"
                   desc="Edit the reminder copy and layout templates delivered to patients for medicine doses, tests, and follow-ups."
@@ -631,6 +683,68 @@ export function ClinicSettings({ onManageAvailability }: { onManageAvailability:
             </button>
 
           </form>
+
+          {/* Card 6: Security & Password */}
+          <div className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-150 dark:border-slate-800 shadow-xl relative overflow-hidden mt-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2.5 bg-brand-50 dark:bg-brand-950/30 text-brand-500 rounded-xl">
+                <Lock size={20} />
+              </div>
+              <div>
+                <h3 className="text-lg font-black dark:text-white leading-tight">Security & Password</h3>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Change or set your clinic administrator login password</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleUpdatePassword} className="space-y-5">
+              {passwordStatus && (
+                <div className={cn(
+                  "p-4 rounded-xl text-xs font-bold",
+                  passwordStatus.type === 'success' 
+                    ? "bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-450 border border-emerald-100 dark:border-emerald-900/30" 
+                    : "bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-450 border border-rose-100 dark:border-rose-900/30"
+                )}>
+                  {passwordStatus.message}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="space-y-1.5">
+                  <label htmlFor="newPassword" className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 cursor-pointer">New Password</label>
+                  <input 
+                    type="password"
+                    id="newPassword"
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    placeholder="••••••••"
+                    required
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800/50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-brand-500/20 transition-all outline-none dark:text-white"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="confirmPassword" className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 cursor-pointer">Confirm New Password</label>
+                  <input 
+                    type="password"
+                    id="confirmPassword"
+                    value={confirmPassword}
+                    onChange={e => setConfirmPassword(e.target.value)}
+                    placeholder="••••••••"
+                    required
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800/50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-brand-500/20 transition-all outline-none dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <button 
+                type="submit" 
+                disabled={isPasswordUpdating}
+                className="w-full py-4 bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white font-black rounded-2xl transition-all shadow-md flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 outline-none"
+              >
+                {isPasswordUpdating ? <Loader2 className="animate-spin" size={18} /> : 'Update Password'}
+              </button>
+            </form>
+          </div>
         </div>
 
         {/* Live Preview Column (Sticky) */}

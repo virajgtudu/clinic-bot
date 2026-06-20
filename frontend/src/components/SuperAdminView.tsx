@@ -12,7 +12,8 @@ import {
   Phone,
   MapPin,
   ShieldAlert,
-  Mail
+  Mail,
+  Key
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from './AuthContext';
@@ -172,6 +173,35 @@ export function SuperAdminView() {
       fetchAdminData();
     } catch (err: any) {
       alert(err.message || 'Failed to delete clinic');
+    }
+  };
+
+  const handleResetPassword = async (email: string) => {
+    if (!session?.access_token) return;
+    const newPassword = prompt(`Enter new password for ${email} (minimum 6 characters):`);
+    if (newPassword === null) return; // cancelled
+    if (newPassword.trim().length < 6) {
+      alert("Password must be at least 6 characters long.");
+      return;
+    }
+    
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/admin/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          email,
+          new_password: newPassword.trim()
+        })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to reset password');
+      alert(`Success: ${json.message}`);
+    } catch (err: any) {
+      alert(err.message || 'Failed to reset password');
     }
   };
 
@@ -524,9 +554,22 @@ export function SuperAdminView() {
                           <Building2 size={12} /> ID: {clinic.phone_number_id || clinic.id}
                         </p>
                         {clinic.emails && clinic.emails.length > 0 && (
-                          <p className="text-[10px] text-brand-500 dark:text-brand-400 font-bold uppercase tracking-wider flex items-center gap-1.5 mt-1" title="Associated Admin User Email">
-                            <Mail size={12} /> {clinic.emails.join(', ')}
-                          </p>
+                          <div className="flex flex-col gap-1.5 mt-1">
+                            {clinic.emails.map(email => (
+                              <div key={email} className="flex items-center gap-2">
+                                <p className="text-[10px] text-brand-500 dark:text-brand-400 font-bold uppercase tracking-wider flex items-center gap-1.5" title="Associated Admin User Email">
+                                  <Mail size={12} /> {email}
+                                </p>
+                                <button
+                                  onClick={() => handleResetPassword(email)}
+                                  className="p-1 text-slate-400 hover:text-brand-500 bg-slate-50 dark:bg-slate-850 hover:bg-brand-50 dark:hover:bg-brand-950/20 rounded-md transition-all active:scale-95"
+                                  title="Reset Password"
+                                >
+                                  <Key size={10} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
                         )}
                       </div>
 
