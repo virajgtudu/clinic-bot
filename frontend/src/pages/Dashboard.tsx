@@ -178,6 +178,42 @@ export default function Dashboard() {
           }
         });
         console.log('[Branding] Shades successfully written to DOM properties.');
+
+        setTimeout(() => {
+          try {
+            console.log('[Branding] --- CSS RULE INSPECTION ---');
+            const el = document.querySelector('.bg-brand-500');
+            if (el) {
+              console.log('[Branding] Active nav item computed background color:', getComputedStyle(el).backgroundColor);
+            } else {
+              console.log('[Branding] No active nav item element (.bg-brand-500) found in DOM.');
+            }
+
+            let foundRule = false;
+            for (let i = 0; i < document.styleSheets.length; i++) {
+              const sheet = document.styleSheets[i];
+              try {
+                const rules = sheet.cssRules || sheet.rules;
+                if (!rules) continue;
+                for (let j = 0; j < rules.length; j++) {
+                  const rule = rules[j] as CSSStyleRule;
+                  if (rule.selectorText && rule.selectorText.includes('.bg-brand-500')) {
+                    console.log(`[Branding] Found rule in stylesheet ${i}:`, rule.cssText);
+                    foundRule = true;
+                  }
+                }
+              } catch (e) {
+                // cross-origin stylesheets might throw error, skip them
+              }
+            }
+            if (!foundRule) {
+              console.log('[Branding] No .bg-brand-500 rule found in any stylesheet.');
+            }
+            console.log('[Branding] ---------------------------');
+          } catch (e) {
+            console.error('[Branding] Error inspecting styleSheets:', e);
+          }
+        }, 1000);
       } catch (e) {
         console.error('[Branding] Failed to generate brand palette:', e);
       }
